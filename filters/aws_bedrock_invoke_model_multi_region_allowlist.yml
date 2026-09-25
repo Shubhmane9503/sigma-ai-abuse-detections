@@ -1,0 +1,23 @@
+title: Allowlist - AWS Bedrock Multi-Region Model Invocation
+id: cdbae70a-6367-44a2-baac-70a70ff1a3c5
+status: experimental
+description: |
+    Allowlist hook for the multi-region correlation 48136d7c-fcf0-43ce-ad6d-25c92fd7218f. Sigma filters
+    cannot target correlation rules, so this filter is applied to its base rule
+    (7e8c1646-c28f-4b13-bfa8-2ea3cc37024f). Events from allowlisted roles never reach the correlation.
+    List roles that legitimately call Bedrock from several regions (multi-region failover services,
+    model evaluation jobs). Entries match the start of userIdentity.arn, which every identity type has
+    (see docs/tuning.md). Replace the placeholder (AWS documentation account ID 111122223333).
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+logsource:
+    product: aws
+    service: cloudtrail
+filter:
+    rules:
+        - 7e8c1646-c28f-4b13-bfa8-2ea3cc37024f
+    selection:
+        userIdentity.arn|startswith:
+            - 'arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/'
+    condition: not selection

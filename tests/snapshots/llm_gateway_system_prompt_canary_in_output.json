@@ -1,0 +1,16 @@
+{
+  "rule": "rules/application/llm_gateway_system_prompt_canary_in_output.yml",
+  "filter": "filters/llm_gateway_system_prompt_canary_in_output_allowlist.yml",
+  "splunk": [
+    "gen_ai.output.messages=\"*SPCANARY-*\" NOT service.name=\"allowlisted-canary-selftest\""
+  ],
+  "esql": [
+    "from * metadata _id, _index, _version | where gen_ai.output.messages like \"*SPCANARY-*\" and not service.name==\"allowlisted-canary-selftest\""
+  ],
+  "golang_expr": [
+    "lower(gen_ai?.output?.messages) contains lower(\"SPCANARY-\") and not (lower(service?.name) == lower(\"allowlisted-canary-selftest\"))"
+  ],
+  "sqlite": [
+    "SELECT * FROM <TABLE_NAME> WHERE `gen_ai.output.messages` LIKE '%SPCANARY-%' ESCAPE '\\' AND (NOT `service.name`='allowlisted-canary-selftest')"
+  ]
+}

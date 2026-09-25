@@ -1,0 +1,23 @@
+title: Allowlist - Azure AI Services Account Keys Listed Or Regenerated
+id: a269bffd-0c36-4673-ae33-6efb2c1de42f
+status: experimental
+description: |
+    Allowlist hook for rule b6c6fdf8-23b1-4f1d-bb4d-0da6c28f664d. Holds the principals expected to list
+    or rotate AI services keys: key-rotation automation, deployment pipelines and the managed identities
+    of applications that read keys at startup.
+    In the AzureActivity table, Caller is a user principal name for users and an object ID (GUID) for
+    service principals and managed identities. Replace the placeholders below with your own values.
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+logsource:
+    product: azure
+    service: activitylogs
+filter:
+    rules:
+        - b6c6fdf8-23b1-4f1d-bb4d-0da6c28f664d
+    selection:
+        Caller:
+            - 00000000-0000-0000-0000-00000000a110
+            - allowlisted-key-rotation@example.com
+    condition: not selection

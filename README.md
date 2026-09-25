@@ -1,10 +1,12 @@
 # sigma-ai-abuse-detections
 
+[![CI](https://github.com/shubhmane9503/sigma-ai-abuse-detections/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/shubhmane9503/sigma-ai-abuse-detections/actions/workflows/ci.yml)
+
 Detection-as-code Sigma rules for AI/LLM abuse (LLMjacking, AI key abuse, shadow AI, agent/MCP tampering), tested in CI against positive and negative logs.
 
-**Status: planning. This README is the build spec; implementation is in progress.**
+**Status: MVP built. All 8 rules, their samples, filters, pipelines, committed queries and the full test harness are in the repository, and `make test` passes.** A few items need repository settings or data that cannot be committed (branch protection, GitHub secret scanning, personal-sandbox baselines). They are left unticked under [Milestones](#milestones).
 
-Nothing described below exists yet unless a milestone checkbox is ticked. The README describes the finished project so that it can be built against, and reviewed against, one milestone at a time.
+This README began as the build spec. It now describes what is built. Where the build differs from the original plan, the difference is stated in place.
 
 Maintained by Shubham Mane ([shubhammane.com](https://www.shubhammane.com)).
 
@@ -16,7 +18,7 @@ Maintained by Shubham Mane ([shubhammane.com](https://www.shubhammane.com)).
 2. [What the finished project looks like](#what-the-finished-project-looks-like)
 3. [Scope](#scope)
 4. [Architecture and tech stack](#architecture-and-tech-stack)
-5. [Planned repository layout](#planned-repository-layout)
+5. [Repository layout](#repository-layout)
 6. [Rule authoring conventions](#rule-authoring-conventions)
 7. [Data sources and attribution](#data-sources-and-attribution)
 8. [Testing strategy](#testing-strategy)
@@ -61,12 +63,12 @@ This repository fills that gap with Sigma rules that are **proven in CI against 
 ### Features
 
 - **8 MVP Sigma rules** covering LLMjacking, AI key abuse, shadow AI, agent/MCP tampering and prompt leakage (see [Scope](#scope)).
-- **Positive and negative samples for every rule**, stored as NDJSON, replayed in CI.
+- **Positive, negative and allowlisted samples for every rule**, stored as NDJSON with a `SOURCE.md` recording where each file came from, replayed in CI by two engines (golang_expr/json_matcher and SQLite).
 - **Fail-closed CI**: `sigma check`, replay tests, correlation tests, conversion snapshots and mapping validation all run on every pull request; a failure in any one blocks the merge.
 - **Committed backend queries** for **Splunk** and **Elastic ES|QL**, regenerated from the rules and checked for drift in CI.
 - **ATT&CK and ATLAS mappings** on every rule, validated against pinned ATT&CK v19.2 and ATLAS 2026.09 data.
 - **Tuning support**: each rule has a false-positive note and an allowlist hook implemented with Sigma [filters](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-filters-specification.md), so environments can tune without editing the rule.
-- **Custom processing pipelines** that map CloudTrail and proxy fields for the chosen backends, since no installed pipeline covers them.
+- **Custom processing pipelines** (`pipelines/splunk/`, `pipelines/esql/`) that map CloudTrail, proxy and endpoint fields for the chosen backends, since no installed pipeline covers them. The ES|QL pipelines fail conversion on any unmapped field.
 - **A coverage matrix** (rule x ATT&CK x ATLAS x backend) generated from the rule files, not maintained by hand.
 
 ### User-facing commands
@@ -82,16 +84,27 @@ The finished repository is driven by `make`. All targets run locally and in CI.
 | `make snapshots` | Regenerates conversion snapshots after an intentional change (the diff is then reviewed in the PR). |
 | `make mappings` | Validates every ATT&CK and ATLAS ID against the pinned framework data. |
 | `make matrix` | Regenerates the coverage matrix in `docs/coverage.md` from rule metadata. |
+| `make scrub` | Checks samples for values that look like real account IDs, keys, IPs or emails. |
+| `make framework-check` | Re-downloads the pinned ATT&CK/ATLAS releases, verifies their checksums and checks the committed extracts. |
+| `make demo` | Breaks a rule in a temporary copy of the repository and shows the tests failing. |
 
-Direct `sigma-cli` usage is also documented for people who want to convert a single rule, for example converting one rule file with the Splunk target and the repository's CloudTrail pipeline.
+Direct `sigma-cli` usage, for converting a single rule with its allowlist filter:
 
-### Example outputs (described, not real results)
+```bash
+sigma convert -t splunk -p pipelines/splunk/cloudtrail.yml \
+    --filter filters/aws_bedrock_model_access_enabled_allowlist.yml \
+    rules/cloud/aws/aws_bedrock_model_access_enabled.yml
+```
 
-- `make test` prints a pytest summary listing each rule with its positive and negative replay result. A passing rule shows at least one match on its positive samples and zero matches on its negative samples. A failing rule names the sample file and the event that matched (or failed to match) unexpectedly.
+Requirements: Python 3.11+, Go 1.26+ (to build json_matcher), git and make.
+
+### Example outputs
+
+- `make test` runs `sigma check`, then pytest with one test per rule and sample file. A failing test names the rule, the sample file and every event that matched, or failed to match, unexpectedly.
 - `make convert` writes one Splunk query and one ES|QL query per rule into `queries/splunk/` and `queries/esql/`, named after the rule file.
-- `make mappings` prints each rule with its ATT&CK and ATLAS IDs and exits non-zero if any ID is unknown in the pinned data.
-- `make matrix` produces a Markdown table with one row per rule and columns for ATT&CK technique, ATLAS technique, log source and backend support.
-- The GitHub Actions run shows a green badge on `main`. A pull request that breaks a rule (for example by changing a field name so the positive sample no longer matches) shows a red check and cannot be merged.
+- `make mappings` prints each rule with its ATT&CK and ATLAS IDs and names, and exits non-zero if any ID is unknown, revoked or deprecated in the pinned data, or does not fit the rule's tactic tags.
+- `make matrix` produces [docs/coverage.md](docs/coverage.md): one row per rule with log source, ATT&CK technique, ATLAS technique, sample counts and links to the committed queries.
+- `make demo` renames a field in the Bedrock rule in a temporary copy and shows `test_positive_samples_match` failing on every positive event (output in [docs/testing.md](docs/testing.md#demo-the-suite-catches-a-broken-rule)). With branch protection enabled, a pull request like that cannot be merged.
 
 ---
 
@@ -101,33 +114,36 @@ Direct `sigma-cli` usage is also documented for people who want to convert a sin
 
 | # | Rule | Log source | ATT&CK v19 / ATLAS |
 |---|---|---|---|
-| 1 | Bedrock model access enabled (entitlement/agreement calls) | AWS CloudTrail | T1496.004 / AML.T0034 |
-| 2 | Bedrock `InvokeModel` from 3 or more regions by one identity in 1 hour (correlation) | AWS CloudTrail | T1078.004 / AML.T0040 |
-| 3 | Azure AI key listed or regenerated by a non-allowlisted principal | Azure Activity | T1552 / AML.T0055 |
-| 4 | Unapproved host/user calling LLM APIs (shadow AI, LLM-API C2) | Proxy | T1567, T1102 / AML.T0096 |
-| 5 | MCP/agent config modified by a non-agent process | File event | Persistence (tactic) / AML.T0081 |
-| 6 | Coding agent started with approval or sandbox bypass flags | Process creation | T1685 / AML.T0112.000 |
-| 7 | Agent-spawned shell reading credential files | Process creation | T1552.001 / AML.T0098 |
-| 8 | System-prompt canary appears in model output | LLM gateway app log | none / AML.T0056 |
+| 1 | [Bedrock model access enabled](rules/cloud/aws/aws_bedrock_model_access_enabled.yml) (entitlement/agreement calls) | AWS CloudTrail | T1496.004 / AML.T0034 |
+| 2 | [Bedrock inference from 3 or more regions by one identity in 1 hour](rules/cloud/aws/aws_bedrock_invoke_model_multi_region.yml) (correlation) | AWS CloudTrail | T1078.004 / AML.T0040 |
+| 3 | [Azure AI key listed or regenerated](rules/cloud/azure/azure_ai_services_key_listed_or_regenerated.yml) by a non-allowlisted principal | Azure Activity | T1552 / AML.T0055 |
+| 4 | [Unapproved host calling LLM APIs](rules/proxy/proxy_llm_api_unapproved_client.yml) (shadow AI, LLM-API C2) | Proxy | T1567, T1102 / AML.T0096 |
+| 5 | [MCP/agent config modified by a non-agent process](rules/endpoint/file_event/file_event_ai_agent_config_modified_by_foreign_process.yml) | File event | Persistence (tactic) / AML.T0081 |
+| 6 | [Coding agent started with approval or sandbox bypass flags](rules/endpoint/process_creation/proc_creation_ai_coding_agent_approval_bypass.yml) | Process creation | T1685 / AML.T0112.000 |
+| 7 | [Agent-spawned process reading credential files](rules/endpoint/process_creation/proc_creation_ai_coding_agent_credential_file_access.yml) | Process creation | T1552.001 / AML.T0098 |
+| 8 | [System-prompt canary appears in model output](rules/application/llm_gateway_system_prompt_canary_in_output.yml) | LLM gateway app log | none / AML.T0056 |
+
+All IDs are validated against the pinned data. In ATT&CK v19.2, T1685 is "Disable or Modify Tools" (tactic Defense Impairment); the older T1562 "Impair Defenses" is revoked there. The full matrix is in [docs/coverage.md](docs/coverage.md).
 
 Every rule ships with:
 
-- at least one positive sample file (events the rule must match),
-- at least one negative sample file (benign, look-alike events the rule must not match),
+- a positive sample file (events the rule must match: every event, not just one),
+- a negative sample file (benign, look-alike events the rule must not match),
+- an allowlisted sample file (events the rule matches that the allowlist filter must suppress),
 - a false-positive note in the rule's `falsepositives` field,
 - an allowlist hook implemented as a Sigma filter,
 - ATT&CK tags in `tags` and ATLAS IDs in a custom `atlas:` field (see [Rule authoring conventions](#rule-authoring-conventions)).
 
 Notes per rule, to guide the builder:
 
-1. **Bedrock model access enabled.** Matches the CloudTrail entitlement/agreement calls made when model access is turned on. The Stratus Red Team Bedrock detonation log contains these events and is the primary positive sample.
-2. **Bedrock multi-region invocation.** A Sigma correlation rule: a base rule selecting `InvokeModel` events, and a correlation that counts distinct regions per identity over a 1-hour timespan with a threshold of 3. Tested with the SQLite correlation path described under [Testing strategy](#testing-strategy).
+1. **Bedrock model access enabled.** Matches the CloudTrail entitlement/agreement calls made when model access is turned on (`PutUseCaseForModelAccess`, `CreateFoundationModelAgreement`, `PutFoundationModelEntitlement`). The Stratus Red Team Bedrock detonation log contains these events and is the primary positive sample. Its other 12 events are the negative sample.
+2. **Bedrock multi-region invocation.** A Sigma correlation rule: a base rule selecting `InvokeModel`, `InvokeModelWithResponseStream`, `Converse` and `ConverseStream` events, and a correlation that counts distinct regions per identity over a 1-hour timespan with a threshold of 3. Tested with the SQLite correlation path described under [Testing strategy](#testing-strategy).
 3. **Azure AI key listed or regenerated.** Matches key listing and key regeneration operations on Azure AI resources from Azure Activity logs. The allowlist filter holds expected automation principals. SigmaHQ only covers this through a generic "rare operations" rule, so the rule's description must justify a dedicated detection (see [Known risks and gaps](#known-risks-and-gaps)).
-4. **Unapproved LLM API use.** Matches proxy requests to known LLM API domains from hosts or users not in an approved list. The approved list lives in a filter so that each environment maintains its own.
+4. **Unapproved LLM API use.** Matches proxy requests to known LLM API domains from hosts not in an approved list. The approved list lives in a filter so that each environment maintains its own. It is keyed on `src_ip` rather than user, because a user allowlist would silently drop unauthenticated proxy events in ES|QL (see [docs/tuning.md](docs/tuning.md#allowlist-fields-must-always-be-present)).
 5. **MCP/agent config modified.** Matches file writes to MCP and coding-agent configuration files by a process that is not the agent itself. No specific ATT&CK technique was chosen in the plan; the rule is tagged with the Persistence tactic until a technique is selected and validated.
-6. **Coding agent bypass flags.** Matches process creation of coding-agent CLIs with approval-skipping or sandbox-disabling flags. Flags change quickly; the rule is date-stamped and re-checked monthly.
-7. **Agent-spawned credential access.** Matches a shell whose parent is a coding agent reading credential files (for example cloud credential files or SSH keys).
-8. **System-prompt canary.** Matches a planted canary string from the system prompt appearing in model output, in LLM gateway application logs shaped after the OpenTelemetry GenAI semantic conventions. There is no ATT&CK mapping; ATLAS only.
+6. **Coding agent bypass flags.** Matches process creation of coding-agent CLIs with approval-skipping or sandbox-disabling flags. Flags change quickly: the rule is date-stamped and re-checked monthly. Flags were verified on 2026-09-25 from the `--help` output of Claude Code 2.1.282, Codex CLI 0.157.0, Gemini CLI 0.61.0 and GitHub Copilot CLI 1.0.88. Node.js-hosted agents are identified from the command line, because their image is `node`.
+7. **Agent-spawned credential access.** Matches a process (usually a shell) whose parent is a coding agent and whose command line references credential files (for example cloud credential files or SSH keys). Native Claude Code runs from `…/claude/versions/<version>`, so the rule matches that path as well as `claude`.
+8. **System-prompt canary.** Matches a planted canary string from the system prompt appearing in model output (`gen_ai.output.messages`), in LLM gateway application logs shaped after the OpenTelemetry GenAI semantic conventions. Canaries follow a `SPCANARY-<random>` prefix convention so one rule covers every application and rotated token. There is no ATT&CK mapping; ATLAS only.
 
 ### Stretch goals
 
@@ -154,8 +170,9 @@ Notes per rule, to guide the builder:
 rules/*.yml ──► sigma check ──────────────────────────────► pass / fail
      │
      ├──► pySigma-backend-golangexpr ──► json_matcher ──► replay over NDJSON samples ──► pytest asserts
+     ├──► pySigma-backend-sqlite ──► SQLite (NULL semantics) ──► must agree with json_matcher
      │
-     ├──► pySigma-backend-sqlite ──► SQLite loaded with NDJSON ──► correlation asserts
+     ├──► pySigma-backend-sqlite (base rule) + sliding window ──► correlation asserts
      │
      ├──► Splunk backend + custom pipelines ─────► queries/splunk/ ──► snapshot tests
      ├──► ES|QL backend + custom pipelines ──────► queries/esql/   ──► snapshot tests
@@ -168,71 +185,70 @@ rules/*.yml ──► sigma check ───────────────�
 | Area | Choice | Notes |
 |---|---|---|
 | Rule format | [Sigma specification 2.1](https://github.com/SigmaHQ/sigma-specification) | Includes correlation rules and filters. |
-| CLI | [sigma-cli](https://github.com/SigmaHQ/sigma-cli) 3.1 | `sigma check` and `sigma convert`. |
-| Library | [pySigma](https://github.com/SigmaHQ/pySigma) 1.5 (LGPL) | Used by the test harness and pipelines. |
-| Backend: Splunk | `pySigma-backend-splunk` | MVP backend. |
-| Backend: Elastic | `pySigma-backend-elasticsearch` (ES\|QL target) | MVP backend. |
-| Backend: tests | `pySigma-backend-golangexpr` | Converts single-event rules to `golang_expr` for replay. Archived upstream, but still pinned by SigmaHQ. |
-| Backend: correlation tests | `pySigma-backend-sqlite` | Converts correlation rules to SQL. |
-| Replay engine | [json_matcher](https://github.com/SigmaHQ/json_matcher) (MIT) | Evaluates `golang_expr` over NDJSON. |
-| Test runner | pytest | Asserts replay, correlation, snapshot and mapping results. |
+| CLI | [sigma-cli](https://github.com/SigmaHQ/sigma-cli) 3.1.0 | `sigma check` and `sigma convert`. |
+| Library | [pySigma](https://github.com/SigmaHQ/pySigma) 1.5.1 (LGPL) | Used by the test harness and pipelines. |
+| Backend: Splunk | `pysigma-backend-splunk` 2.1.0 | MVP backend. |
+| Backend: Elastic | `pySigma-backend-elasticsearch` 2.1.1 (ES\|QL target) | MVP backend. |
+| Backend: tests | `pySigma-backend-golangexpr` 1.0.0 | Converts single-event rules to `golang_expr` for replay. Archived upstream, but still pinned by SigmaHQ. |
+| Backend: SQL tests | `pySigma-backend-sqlite` 1.2.4 | Converts correlation base rules, and single-event rules for the NULL-semantics cross-check. |
+| Replay engine | [json_matcher](https://github.com/SigmaHQ/json_matcher) v0.0.2 (MIT), commit `3bb3022` | Evaluates `golang_expr` over NDJSON. Built from source by `make setup`. |
+| Test runner | pytest 9.1.1 | Asserts replay, correlation, snapshot and mapping results. |
 | CI | GitHub Actions | Required status check on `main`. |
 
 **Why Splunk and ES|QL and not Kusto:** the Kusto backend rejected correlation rules in testing during planning. Kusto remains a stretch goal.
 
-**Custom pipelines:** no installed pipeline covered the CloudTrail and proxy field names needed, so the repository carries small custom pySigma processing pipelines (YAML) for those log sources, one set per backend where needed.
+**Custom pipelines:** no installed pipeline covered the CloudTrail and proxy field names needed, so the repository carries small custom pySigma processing pipelines (YAML), one file per log source and backend. The assumed data sources (Splunk Add-on for AWS, Splunk CIM Web, Elastic AWS integration, Elastic Defend) are listed in [docs/tuning.md](docs/tuning.md#backend-caveats).
 
-Exact package versions for the backends and Python are pinned in the dependency file when the first code is committed. The versions above (Sigma spec 2.1, sigma-cli 3.1, pySigma 1.5) are the ones chosen in the plan.
+All Python packages, including transitive dependencies, are pinned in `requirements.txt`. The toolchain runs on Python 3.11.
 
 ---
 
-## Planned repository layout
-
-This is the planned structure. None of these folders exist yet; they will be created as milestones are built.
+## Repository layout
 
 ```
 sigma-ai-abuse-detections/
 ├── README.md
-├── LICENSE-RULES              # DRL 1.1 (added with first rules)
-├── LICENSE                    # MIT for code (added with first code)
-├── NOTICE                     # third-party attribution (Splunk attack_data, etc.)
+├── LICENSE-RULES              # DRL 1.1 (rules/, filters/)
+├── LICENSE                    # MIT (code)
+├── NOTICE                     # third-party attribution (Stratus Red Team, Splunk attack_data, MITRE)
 ├── Makefile
 ├── requirements.txt           # pinned tool versions
-├── .github/
-│   └── workflows/
-│       └── ci.yml             # sigma check, tests, snapshots, mappings, secret scan
+├── pytest.ini
+├── .github/workflows/ci.yml   # sigma check, tests, query drift, framework data check, gitleaks
 ├── rules/
-│   ├── cloud/
-│   │   ├── aws/               # Bedrock rules (single-event and correlation)
-│   │   └── azure/             # Azure AI key rule
+│   ├── cloud/aws/             # Bedrock rules (single-event and correlation)
+│   ├── cloud/azure/           # Azure AI key rule
 │   ├── proxy/                 # shadow AI / LLM API use
-│   ├── endpoint/
-│   │   ├── file_event/        # MCP/agent config tampering
-│   │   └── process_creation/  # agent bypass flags, agent-spawned credential access
+│   ├── endpoint/file_event/   # MCP/agent config tampering
+│   ├── endpoint/process_creation/  # agent bypass flags, agent-spawned credential access
 │   └── application/           # system-prompt canary
-├── filters/                   # Sigma filters: allowlist hooks, one per rule
-├── pipelines/                 # custom pySigma pipelines (CloudTrail, proxy)
+├── filters/                   # <rule>_allowlist.yml: one Sigma filter (allowlist hook) per rule
+├── pipelines/
+│   ├── splunk/                # cloudtrail.yml, proxy.yml
+│   └── esql/                  # cloudtrail.yml, proxy.yml, endpoint.yml
 ├── queries/
 │   ├── splunk/                # generated by `make convert`, committed
 │   └── esql/                  # generated by `make convert`, committed
 ├── tests/
-│   ├── data/
-│   │   └── <rule-name>/
-│   │       ├── positive.ndjson
-│   │       └── negative.ndjson
-│   ├── snapshots/             # expected backend output
-│   ├── test_replay.py         # single-event positive/negative replay
+│   ├── harness.py             # conversion, json_matcher replay, SQLite replay, sliding-window correlation
+│   ├── data/<rule>/           # positive / negative / allowlisted .ndjson + SOURCE.md
+│   ├── snapshots/             # expected Splunk, ES|QL, golang_expr and SQLite output per rule
+│   ├── test_replay.py         # single-event replay (two engines)
 │   ├── test_correlation.py    # SQLite-based correlation tests
-│   ├── test_snapshots.py      # conversion snapshot tests
-│   └── test_mappings.py       # ATT&CK / ATLAS ID validation
+│   ├── test_snapshots.py      # snapshots, committed-query drift, coverage matrix
+│   ├── test_mappings.py       # ATT&CK / ATLAS ID validation
+│   ├── test_meta.py           # samples, filters and metadata present for every rule
+│   ├── test_scrub.py          # no real-looking identifiers in samples
+│   └── test_harness.py        # harness unit tests and upstream-bug trackers
 ├── mappings/
-│   ├── attack-v19.2/          # pinned ATT&CK data (or a checksum + fetch script)
-│   └── atlas-2026.09/         # pinned ATLAS data (or a checksum + fetch script)
-├── scripts/                   # coverage matrix generator, sample scrubber
+│   ├── attack-v19.2/          # extract of the pinned ATT&CK STIX bundle (source URL + SHA-256 inside)
+│   └── atlas-2026.09/         # extract of the pinned ATLAS release (source URL + SHA-256 inside)
+├── scripts/                   # conversions, coverage matrix, mapping validation, sample scrubber,
+│                              # framework data fetcher, pinned sigma check wrapper, demo
 └── docs/
     ├── coverage.md            # generated coverage matrix
     ├── testing.md             # how the harness works
-    └── tuning.md              # false positives and allowlists
+    └── tuning.md              # false positives, allowlists, backend caveats
 ```
 
 ---
@@ -243,7 +259,8 @@ sigma-ai-abuse-detections/
 - **ATT&CK** goes in `tags` using the standard Sigma form (for example `attack.t1496.004`, or a tactic tag such as `attack.persistence` where no technique is chosen).
 - **ATLAS** goes in a custom top-level `atlas:` field (a list of IDs such as `AML.T0034`). The Sigma spec has no ATLAS tag namespace; custom fields are allowed, and this layout passed `sigma check` during planning.
 - `references` cites the public source that motivated the rule (for example the Stratus Red Team technique page or a vendor rule), without copying vendor logic.
-- Every rule has a companion filter in `filters/` that serves as the allowlist hook, with an empty or placeholder allowlist and a comment explaining what to add.
+- Every rule has a companion filter `filters/<rule>_allowlist.yml` that serves as the allowlist hook, with a placeholder allowlist and a comment explaining what to add. Filters key on fields every event has (see [docs/tuning.md](docs/tuning.md#allowlist-fields-must-always-be-present)).
+- A correlation rule and its base rule live in the same file (a multi-document YAML), so the file is one testable unit.
 - Rules that depend on fast-changing agent CLI flags state the date the flags were last verified in `modified` and in the description, and are re-checked monthly.
 
 ---
@@ -253,8 +270,8 @@ sigma-ai-abuse-detections/
 | Source | License | Link | How it is used |
 |---|---|---|---|
 | Stratus Red Team, Bedrock `InvokeModel` technique | Apache-2.0 | [stratus-red-team.cloud](https://stratus-red-team.cloud/attack-techniques/AWS/aws.impact.bedrock-invoke-model/) | Real CloudTrail logs from a Bedrock LLMjacking detonation. Positive samples for the Bedrock rules. |
-| Splunk attack_data | Apache-2.0 | [github.com/splunk/attack_data](https://github.com/splunk/attack_data) | Bedrock, MCP, Ollama and Gemini "yolo" samples. Positive samples for cloud, agent and MCP rules. **Must be credited in a NOTICE file.** |
-| Personal AWS/Azure sandbox | n/a (self-generated) | n/a | Benign baselines for negative samples. Scrubbed before commit. |
+| Splunk attack_data | Apache-2.0 | [github.com/splunk/attack_data](https://github.com/splunk/attack_data) | The Gemini `--yolo` / `-yolo` command lines from `T1480/ai_cli_override/gemini_yolo.log` are positive samples for rule 6. The Bedrock datasets there are model-invocation logs, not CloudTrail, and the MCP dataset is JSON-RPC traffic, not file events, so neither fits the MVP rules. Credited in NOTICE. |
+| Personal AWS/Azure sandbox | n/a (self-generated) | n/a | Planned for benign baselines. **Not yet used.** The current negatives come from the Stratus log and hand-crafted events (see each `SOURCE.md`). |
 | OpenTelemetry GenAI semantic conventions | Apache-2.0 | [github.com/open-telemetry/semantic-conventions-genai](https://github.com/open-telemetry/semantic-conventions-genai) | Field shapes for hand-crafted LLM gateway application logs (canary rule). |
 | MITRE ATT&CK v19.2 | See MITRE terms | [attack.mitre.org/resources/versions](https://attack.mitre.org/resources/versions/) | Pinned technique IDs for mapping validation. v19 replaced Defense Evasion with Stealth and Defense Impairment. |
 | MITRE ATLAS 2026.09 | Apache-2.0 | [github.com/mitre-atlas/atlas-data](https://github.com/mitre-atlas/atlas-data) | Pinned ATLAS technique IDs for mapping validation. |
@@ -289,12 +306,15 @@ Mirrors SigmaHQ's [regression data format](https://github.com/SigmaHQ/sigma/blob
 - Each single-event rule is converted to `golang_expr` with `pySigma-backend-golangexpr`.
 - The expression is replayed over the rule's NDJSON samples with [json_matcher](https://github.com/SigmaHQ/json_matcher).
 - pytest asserts:
-  - **positive samples:** at least 1 match,
-  - **negative samples:** exactly 0 matches.
+  - **positive samples:** every event matches (stricter than the planned "at least 1"),
+  - **negative samples:** exactly 0 matches,
+  - **allowlisted samples:** 0 matches with the filter and every event matching without it (proves the allowlist hook is live).
+- The same samples are replayed through the SQLite backend, which has SQL NULL semantics like ES|QL, and both engines must agree. This catches allowlist filters that silently drop events lacking the filter field.
 - Tests are parametrized per rule, so a failure names the rule and the sample file.
-- A meta-test fails if any rule in `rules/` has no positive or no negative sample.
+- A meta-test fails if any rule in `rules/` has no positive, negative or allowlisted sample, no `SOURCE.md`, or no filter referencing it.
 - Known issue handled in the harness: json_matcher v0.0.2 fails on a trailing newline in NDJSON, so the harness normalizes sample files (strips the trailing newline) before replay, and a unit test covers that normalization.
-- Verified during planning: this approach matched the 3 entitlement events in the Stratus Red Team Bedrock log and nothing in the negative file.
+- Verified during planning, and now in CI: this approach matches the 3 entitlement events in the Stratus Red Team Bedrock log and nothing in the negative file.
+- Also handled: the golang_expr backend emits hyphenated field names such as `cs-host` bare (parsed as `cs - host`). The harness emits them as `$env["cs-host"]`.
 
 What each negative sample should contain (guidance):
 
@@ -313,11 +333,12 @@ What each negative sample should contain (guidance):
 
 - Correlation rules (the Bedrock multi-region rule in the MVP) are converted with `pySigma-backend-sqlite`.
 - The test loads the NDJSON samples into an in-memory SQLite database, runs the generated SQL and asserts the result (at least one row for positives, zero rows for negatives).
-- Known issue: the SQLite correlation output dropped the time window in testing during planning. The negative sample set therefore **must** include events that meet the region threshold only when the 1-hour window is ignored. If the generated SQL drops the window, this test fails, and the harness must either post-process the SQL or implement the windowed check explicitly. The chosen workaround is documented in `docs/testing.md`.
+- Known issue, confirmed with pySigma-backend-sqlite 1.2.4: the correlation SQL has no time predicate at all. The negative sample set **includes** a group that meets the region threshold only when the 1-hour window is ignored (three regions within 61 minutes).
+- Chosen workaround: the harness runs the backend's SQL for the base rule (so selection and filters stay backend-generated) and applies the rule's timespan as a sliding window itself. A tracker test fails when the upstream bug is fixed. Details are in [docs/testing.md](docs/testing.md#correlation-rules-sqlite-with-an-explicit-window).
 
 ### 4. Conversion snapshots
 
-- `make convert` output for Splunk and ES|QL is compared against committed snapshots in `tests/snapshots/`.
+- Fresh Splunk, ES|QL, golang_expr and SQLite output is compared against committed snapshots in `tests/snapshots/`.
 - CI also regenerates `queries/` and fails if it differs from what is committed, so committed queries can never drift from the rules.
 - Intentional changes are made with `make snapshots`, and the resulting diff is reviewed in the pull request.
 
@@ -325,11 +346,12 @@ What each negative sample should contain (guidance):
 
 - Every ATT&CK ID in `tags` and every ATLAS ID in `atlas:` is checked against the pinned ATT&CK v19.2 and ATLAS 2026.09 data.
 - The test fails on unknown IDs and on IDs that are revoked or deprecated in the pinned data.
-- The pinned data is vendored or fetched with a recorded checksum, so results are reproducible.
+- The pinned data is vendored as compact extracts. `scripts/fetch_framework_data.py` rebuilds them from upstream files pinned by commit and SHA-256, and CI checks that they still match.
+- `sigma check` itself is pointed at the same pinned ATT&CK extract. Out of the box, pySigma validates tags against whatever ATT&CK release is newest.
 
 ### 6. Repository hygiene checks
 
-- Secret scanning runs in CI and blocks the merge on findings.
+- Secret scanning (gitleaks, pinned version, full history) runs in CI and blocks the merge on findings.
 - A sample-scrub check fails if sample files contain values that look like real AWS account IDs, access keys or other credentials (placeholder values are allowlisted).
 
 ### How results are reported
@@ -347,8 +369,8 @@ What each negative sample should contain (guidance):
 - **ATLAS mapping without breaking the spec.** ATLAS IDs live in a custom `atlas:` field, ATT&CK in `tags`, both validated against pinned data.
 - **Scrubbed samples.** All samples are scrubbed of AWS account IDs, Azure subscription and tenant IDs, access keys, tokens, real usernames, real hostnames and real IP addresses before commit. Replacements use consistent placeholders so correlation logic still works.
 - **No sensitive or organizational data.** Only public datasets, a personal sandbox and hand-crafted logs are used. No logs from any real organization are ever committed.
-- **Secret scanning.** GitHub secret scanning and push protection are enabled on the repository, and a secret scanner also runs in CI.
-- **License hygiene.** Elastic's rules are under the Elastic License 2.0, so this project writes its own logic and cites them rather than porting. Third-party samples are credited in NOTICE. Rules are DRL 1.1 and code is MIT (added with the first code).
+- **Secret scanning.** A secret scanner (gitleaks) runs in CI. GitHub secret scanning and push protection are repository settings to enable (see [Milestones](#milestones)).
+- **License hygiene.** Elastic's rules are under the Elastic License 2.0, so this project writes its own logic and cites them rather than porting. Third-party samples are credited in NOTICE. Rules are DRL 1.1 and code is MIT.
 - **Stay at the log level.** Prompt-injection payload detection is left to ATR, which is referenced, not duplicated.
 - **Date-stamped fragile rules.** Rules that depend on agent CLI flags or config file paths record when they were last verified and are re-checked monthly.
 
@@ -356,41 +378,43 @@ What each negative sample should contain (guidance):
 
 ## Milestones
 
-The MVP is planned as 3 weekends. Each milestone ends with a pull request that passes CI.
+The MVP was planned as 3 weekends, each ending with a pull request that passes CI. All three were built together on branch `claude/practical-cori-qwwk2q`. Ticked items are implemented and pass `make test` locally. The boxes become true on `main` once that pull request merges with CI green. Unticked items need a repository setting or data that cannot come from a pull request.
 
 ### Weekend 1: foundation and Bedrock rules
 
-- [ ] Repository scaffolding, Makefile, pinned `requirements.txt`
-- [ ] GitHub Actions CI workflow with `sigma check` and pytest, set as a required check on `main`
-- [ ] Secret scanning enabled; sample-scrub check in place
-- [ ] Single-event replay harness (golang_expr + json_matcher), including the trailing-newline workaround
-- [ ] Custom pipelines for CloudTrail fields (Splunk and ES|QL)
-- [ ] Rule 1: Bedrock model access enabled, with Stratus Red Team positive sample and a negative sample
-- [ ] Rule 2: Bedrock multi-region `InvokeModel` correlation rule, with SQLite correlation test (including a window negative)
-- [ ] NOTICE file started
+- [x] Repository scaffolding, Makefile, pinned `requirements.txt`
+- [x] GitHub Actions CI workflow with `sigma check` and pytest
+- [ ] CI set as a required check on `main` (branch protection: repository setting)
+- [ ] GitHub secret scanning and push protection enabled (repository setting)
+- [x] Secret scanner in CI (gitleaks); sample-scrub check in place
+- [x] Single-event replay harness (golang_expr + json_matcher), including the trailing-newline workaround
+- [x] Custom pipelines for CloudTrail fields (Splunk and ES|QL)
+- [x] Rule 1: Bedrock model access enabled, with Stratus Red Team positive sample and a negative sample
+- [x] Rule 2: Bedrock multi-region `InvokeModel` correlation rule, with SQLite correlation test (including a window negative)
+- [x] NOTICE file started
 
 ### Weekend 2: Azure, proxy and endpoint rules
 
-- [ ] Custom pipeline for proxy fields
-- [ ] Rule 3: Azure AI key listed or regenerated, with allowlist filter and a written justification versus the generic SigmaHQ rule
-- [ ] Rule 4: unapproved LLM API use (proxy), with approved-list filter
-- [ ] Rule 5: MCP/agent config modified by a non-agent process
-- [ ] Rule 6: coding agent started with approval or sandbox bypass flags (date-stamped)
-- [ ] Rule 7: agent-spawned shell reading credential files
-- [ ] Benign negatives from the personal AWS/Azure sandbox, scrubbed
-- [ ] Splunk attack_data samples credited in NOTICE
+- [x] Custom pipeline for proxy fields
+- [x] Rule 3: Azure AI key listed or regenerated, with allowlist filter and a written justification versus the generic SigmaHQ rule
+- [x] Rule 4: unapproved LLM API use (proxy), with approved-list filter
+- [x] Rule 5: MCP/agent config modified by a non-agent process
+- [x] Rule 6: coding agent started with approval or sandbox bypass flags (date-stamped)
+- [x] Rule 7: agent-spawned shell reading credential files
+- [ ] Benign negatives from the personal AWS/Azure sandbox, scrubbed (needs sandbox exports; current negatives are the Stratus log's benign events and hand-crafted look-alikes)
+- [x] Splunk attack_data samples credited in NOTICE
 
 ### Weekend 3: canary, correlation, coverage and docs
 
-- [ ] Rule 8: system-prompt canary in model output, with hand-crafted OpenTelemetry GenAI-shaped logs
-- [ ] Correlation tests finalized and the SQLite time-window workaround documented
-- [ ] Conversion snapshot tests and committed `queries/` with drift check
-- [ ] Mapping validation against pinned ATT&CK v19.2 and ATLAS 2026.09 data
-- [ ] Coverage matrix generated into `docs/coverage.md`
-- [ ] `docs/testing.md` and `docs/tuning.md` written
-- [ ] README updated from "planning" to reflect what is built, with CI badge
-- [ ] Short demo showing CI catching a deliberately broken rule
-- [ ] LICENSE (MIT) and LICENSE-RULES (DRL 1.1) added
+- [x] Rule 8: system-prompt canary in model output, with hand-crafted OpenTelemetry GenAI-shaped logs
+- [x] Correlation tests finalized and the SQLite time-window workaround documented
+- [x] Conversion snapshot tests and committed `queries/` with drift check
+- [x] Mapping validation against pinned ATT&CK v19.2 and ATLAS 2026.09 data
+- [x] Coverage matrix generated into `docs/coverage.md`
+- [x] `docs/testing.md` and `docs/tuning.md` written
+- [x] README updated from "planning" to reflect what is built, with CI badge
+- [x] Short demo showing CI catching a deliberately broken rule (`make demo`)
+- [x] LICENSE (MIT) and LICENSE-RULES (DRL 1.1) added
 
 ---
 
@@ -398,18 +422,18 @@ The MVP is planned as 3 weekends. Each milestone ends with a pull request that p
 
 The MVP is done when all of the following are true and can be checked by a reviewer from a clean clone:
 
-- [ ] All 8 MVP rules exist in `rules/` and pass `sigma check`.
-- [ ] Every rule has at least one positive and one negative NDJSON sample, and the meta-test enforcing this passes.
-- [ ] Positive/negative replay passes in CI for all single-event rules (at least 1 match on positives, 0 on negatives).
-- [ ] The correlation rule passes its SQLite test, including a negative case that only fails if the 1-hour window is respected.
-- [ ] Splunk and ES|QL queries for every rule are committed in `queries/`, match fresh `make convert` output, and match snapshots.
-- [ ] Every ATT&CK and ATLAS ID is validated against pinned ATT&CK v19.2 and ATLAS 2026.09 data.
-- [ ] Every rule has a false-positive note and an allowlist filter.
-- [ ] CI is a required check on `main` and the badge on `main` is green.
-- [ ] `make test` and `make convert` work from a clean clone after `make setup`.
-- [ ] Secret scanning is enabled; no keys, account IDs or real organizational data are present in the repository history.
-- [ ] NOTICE credits all third-party samples; LICENSE (MIT) and LICENSE-RULES (DRL 1.1) are present.
-- [ ] The coverage matrix is generated and linked from the README.
+- [x] All 8 MVP rules exist in `rules/` and pass `sigma check`.
+- [x] Every rule has at least one positive and one negative NDJSON sample, and the meta-test enforcing this passes.
+- [x] Positive/negative replay passes in CI for all single-event rules (every positive event matches, 0 matches on negatives).
+- [x] The correlation rule passes its SQLite test, including a negative case that only fails if the 1-hour window is respected.
+- [x] Splunk and ES|QL queries for every rule are committed in `queries/`, match fresh `make convert` output, and match snapshots.
+- [x] Every ATT&CK and ATLAS ID is validated against pinned ATT&CK v19.2 and ATLAS 2026.09 data.
+- [x] Every rule has a false-positive note and an allowlist filter.
+- [ ] CI is a required check on `main` and the badge on `main` is green (needs branch protection and a first run on `main`).
+- [x] `make test` and `make convert` work from a clean clone after `make setup`.
+- [ ] Secret scanning is enabled; no keys, account IDs or real organizational data are present in the repository history. (gitleaks and the scrub check pass on the full history. The GitHub secret scanning setting is still to enable.)
+- [x] NOTICE credits all third-party samples; LICENSE (MIT) and LICENSE-RULES (DRL 1.1) are present.
+- [x] The coverage matrix is generated and linked from the README.
 
 ---
 
@@ -425,7 +449,12 @@ These were found during planning and must be handled, not ignored.
   - json_matcher v0.0.2 fails on a trailing newline in NDJSON. The harness must normalize input.
   - The SQLite correlation output dropped the time window in testing. The correlation tests must detect this, and a workaround must be documented.
   - The Kusto backend rejected correlation rules in testing, which is why Kusto is a stretch goal.
-- **Agent CLI flags change fast.** Date-stamp those rules and re-check monthly.
+- **Agent CLI flags change fast.** Date-stamp those rules and re-check monthly. Example from the 2026-09-25 check: Codex CLI 0.157.0 has no `--yolo` flag (Copilot CLI and Gemini CLI do), and native Claude Code runs from `…/claude/versions/<version>` rather than a file named `claude`.
+- **Found while building (handled, see [docs/tuning.md](docs/tuning.md)):**
+  - Allowlist filters on fields some events lack silently drop those events in SQL-style backends (ES|QL). The AWS filters use `userIdentity.arn` and the proxy filter uses `src_ip` for this reason, and a two-engine test enforces it.
+  - ES|QL string comparisons are case-sensitive while Sigma's are not. Azure operation names are often upper case in AzureActivity, so check your data before relying on the ES|QL query for rule 3.
+  - Splunk and ES|QL correlation output uses fixed hourly buckets, so multi-region bursts that straddle a bucket boundary can be missed.
+  - pySigma's `sigma check` downloads the newest ATT&CK release by default. `scripts/sigma_check.py` pins it.
 - **Sample realism.** Hand-crafted and sandbox logs may not reflect every production log variant. Rules state their assumptions about log format in the description.
 
 ---
@@ -447,10 +476,8 @@ This README is written to be handed to an AI coding assistant (for example Claud
 
 ## License
 
-Planned licensing, to be added with the first code (no LICENSE files are included yet):
-
-- **Rules** (`rules/`, `filters/`): [Detection Rule License (DRL) 1.1](https://github.com/SigmaHQ/Detection-Rule-License).
-- **Code** (test harness, pipelines, scripts): MIT.
-- **Third-party samples:** retain their original licenses (Apache-2.0 for Stratus Red Team and Splunk attack_data) and are credited in a NOTICE file.
+- **Rules** (`rules/`, `filters/`): [Detection Rule License (DRL) 1.1](https://github.com/SigmaHQ/Detection-Rule-License), see [LICENSE-RULES](LICENSE-RULES).
+- **Code** (test harness, pipelines, scripts): MIT, see [LICENSE](LICENSE).
+- **Third-party samples:** retain their original licenses (Apache-2.0 for Stratus Red Team and Splunk attack_data) and are credited in [NOTICE](NOTICE).
 
 Maintained by Shubham Mane ([shubhammane.com](https://www.shubhammane.com)).

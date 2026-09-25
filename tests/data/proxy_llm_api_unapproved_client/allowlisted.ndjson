@@ -1,0 +1,2 @@
+{"date":"2026-09-21","time":"10:00:00","src_ip":"192.0.2.10","cs-username":"","cs-method":"POST","cs-host":"api.openai.com","c-uri":"https://api.openai.com/v1/responses","c-uri-stem":"/v1/responses","sc-status":200,"c-useragent":"ai-gateway/1.4","dst_ip":"198.51.100.200"}
+{"date":"2026-09-21","time":"10:01:00","src_ip":"192.0.2.10","cs-method":"POST","cs-host":"api.anthropic.com","c-uri":"https://api.anthropic.com/v1/messages","c-uri-stem":"/v1/messages","sc-status":200,"c-useragent":"ai-gateway/1.4","dst_ip":"198.51.100.200"}

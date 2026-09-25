@@ -1,0 +1,56 @@
+title: LLM API Request From Unapproved Client
+id: b314ce26-154f-4801-aadd-0131f0c92a23
+status: experimental
+description: |
+    Detects web proxy requests to the API endpoints of public large language model providers. Combined
+    with the approved-clients allowlist filter, it surfaces hosts and users calling LLM APIs outside
+    sanctioned use ("shadow AI"), including malware or scripts using an LLM API as a
+    command-and-control, tasking or exfiltration channel.
+    The rule matches API hostnames only, not the providers' consumer chat websites, so browsing to a
+    chat UI does not trigger it. The list is intentionally limited to widely used providers. Extend it
+    with the providers relevant to your environment.
+    Log format assumption: web proxy logs using the Sigma proxy taxonomy (cs-host, src_ip, cs-username).
+    Allowlist hook: filters/proxy_llm_api_unapproved_client_allowlist.yml holds the approved
+    hosts and users. Until it is populated, every LLM API request alerts.
+references:
+    - https://atlas.mitre.org/techniques/AML.T0096
+    - https://attack.mitre.org/techniques/T1102/
+    - https://attack.mitre.org/techniques/T1567/
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+tags:
+    - attack.command-and-control
+    - attack.t1102
+    - attack.exfiltration
+    - attack.t1567
+atlas:
+    - AML.T0096
+logsource:
+    category: proxy
+detection:
+    selection_exact:
+        cs-host:
+            - api.openai.com
+            - api.anthropic.com
+            - generativelanguage.googleapis.com
+            - api.mistral.ai
+            - api.cohere.com
+            - api.cohere.ai
+            - api.groq.com
+            - api.together.xyz
+            - api.together.ai
+            - openrouter.ai
+            - api.deepseek.com
+            - api.x.ai
+            - api.perplexity.ai
+            - api.fireworks.ai
+    selection_suffix:
+        cs-host|endswith:
+            - .openai.azure.com
+            - .services.ai.azure.com
+    condition: 1 of selection_*
+falsepositives:
+    - Sanctioned applications, developer workstations and AI gateways that call LLM APIs. Add them to the allowlist filter by source IP or user.
+    - Browser extensions and desktop apps with built-in AI features that call provider APIs directly.
+level: medium

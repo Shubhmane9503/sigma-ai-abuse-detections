@@ -1,0 +1,92 @@
+"""Rule conversion shared by `make convert`, `make snapshots` and the snapshot tests.
+
+Each rule is converted together with its allowlist filter, the same way
+`sigma convert --filter filters/<rule>_allowlist.yml` would:
+
+  splunk       Splunk SPL with the pipelines in pipelines/splunk/
+  esql         Elastic ES|QL with the pipelines in pipelines/esql/
+  golang_expr  expression replayed by the tests (single-event rules only)
+  sqlite       SQL used by the correlation tests
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+from sigma.backends.elasticsearch import ESQLBackend
+from sigma.backends.splunk import SplunkBackend
+from sigma.backends.sqlite import sqliteBackend
+from sigma.processing.pipeline import ProcessingPipeline
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "tests"))
+
+from harness import PIPELINES_DIR, SNAPSHOT_DIR, RuleCase, ReplayBackend, rule_cases  # noqa: E402
+
+QUERY_DIRS = {"splunk": ROOT / "queries" / "splunk", "esql": ROOT / "queries" / "esql"}
+QUERY_SUFFIX = {"splunk": ".spl", "esql": ".esql"}
+
+
+def load_pipeline(target: str) -> ProcessingPipeline:
+    pipeline = ProcessingPipeline()
+    for path in sorted((PIPELINES_DIR / target).glob("*.yml")):
+        pipeline += ProcessingPipeline.from_yaml(path.read_text(encoding="utf-8"))
+    return pipeline
+
+
+def backends() -> dict:
+    return {
+        "splunk": SplunkBackend(processing_pipeline=load_pipeline("splunk")),
+        "esql": ESQLBackend(processing_pipeline=load_pipeline("esql")),
+        "golang_expr": ReplayBackend(),
+        "sqlite": sqliteBackend(),
+    }
+
+
+def convert(case: RuleCase) -> dict[str, list[str]]:
+    """Convert one rule (with its filter) to every target. Unsupported targets are omitted."""
+    results = {}
+    for name, backend in backends().items():
+        if name == "golang_expr" and case.is_correlation:
+            continue  # golang_expr has no correlation support; the SQLite harness covers these rules
+        results[name] = [str(query) for query in backend.convert(case.collection(with_filter=True))]
+    return results
+
+
+def render_query_file(queries: list[str]) -> str:
+    return "\n\n".join(query.strip() for query in queries) + "\n"
+
+
+def render_snapshot(case: RuleCase, results: dict[str, list[str]]) -> str:
+    snapshot = {"rule": str(case.path.relative_to(ROOT)), "filter": str(case.filter_path.relative_to(ROOT)), **results}
+    return json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n"
+
+
+def expected_files() -> dict[Path, str]:
+    """Every generated file (committed queries and snapshots) with its expected content."""
+    files = {}
+    for case in rule_cases():
+        results = convert(case)
+        for target, directory in QUERY_DIRS.items():
+            files[directory / f"{case.stem}{QUERY_SUFFIX[target]}"] = render_query_file(results[target])
+        files[SNAPSHOT_DIR / f"{case.stem}.json"] = render_snapshot(case, results)
+    return files
+
+
+def main(argv: list[str]) -> int:
+    """Write generated files. With --queries-only, only queries/ is written."""
+    queries_only = "--queries-only" in argv
+    for path, content in expected_files().items():
+        if queries_only and SNAPSHOT_DIR in path.parents:
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists() or path.read_text(encoding="utf-8") != content:
+            path.write_text(content, encoding="utf-8")
+            print(f"wrote {path.relative_to(ROOT)}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

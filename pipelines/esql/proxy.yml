@@ -1,0 +1,32 @@
+# ES|QL: web proxy events in Elastic Common Schema (for example the Squid, Zscaler or
+# network traffic integrations). Maps the Sigma proxy taxonomy to ECS.
+name: esql-proxy-ecs
+priority: 20
+transformations:
+  - id: esql_proxy_index
+    type: set_state
+    key: index
+    val: logs-*
+    rule_conditions:
+      - type: logsource
+        category: proxy
+  - id: esql_proxy_fields
+    type: field_name_mapping
+    mapping:
+      cs-host: url.domain
+      c-uri: url.original
+      c-uri-stem: url.path
+      c-useragent: user_agent.original
+      cs-method: http.request.method
+      sc-status: http.response.status_code
+      src_ip: source.ip
+      dst_ip: destination.ip
+      cs-username: user.name
+    rule_conditions:
+      - type: logsource
+        category: proxy
+  - id: esql_proxy_unmapped
+    type: strict_field_mapping_failure
+    rule_conditions:
+      - type: logsource
+        category: proxy

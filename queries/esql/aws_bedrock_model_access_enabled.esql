@@ -1,0 +1,1 @@
+from logs-aws.cloudtrail-* metadata _id, _index, _version | where event.provider=="bedrock.amazonaws.com" and (event.action in ("PutUseCaseForModelAccess", "CreateFoundationModelAgreement", "PutFoundationModelEntitlement")) and not starts_with(aws.cloudtrail.user_identity.arn, "arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/")

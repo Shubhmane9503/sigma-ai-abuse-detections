@@ -1,0 +1,20 @@
+title: Allowlist - AI Agent Or MCP Configuration Modified By Non-Agent Process
+id: f3ac100e-32f5-43c4-9ca7-aca4ee188bc1
+status: experimental
+description: |
+    Allowlist hook for rule 1d735fc6-dce5-4f29-bb2c-7e7413754b5d. Holds the tools approved to write agent
+    and MCP configuration: dotfile managers, configuration management agents, internal provisioning tools.
+    Replace the placeholder image path below. Adding a generic interpreter such as node or python here
+    hides any script run by that interpreter. See docs/tuning.md before doing so.
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+logsource:
+    category: file_event
+filter:
+    rules:
+        - 1d735fc6-dce5-4f29-bb2c-7e7413754b5d
+    selection:
+        Image|endswith:
+            - /allowlisted-config-manager
+    condition: not selection

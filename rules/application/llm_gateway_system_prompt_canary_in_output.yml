@@ -1,0 +1,38 @@
+title: System Prompt Canary Token Returned In LLM Output
+id: fd16f09c-e2f8-40d2-9184-7c394d5e0611
+status: experimental
+description: |
+    Detects a canary token planted in an LLM application's system prompt appearing in the model's output,
+    which shows that the system prompt was leaked, typically through prompt injection or a
+    jailbreak. The canary is a unique string embedded in the system prompt (for example in a comment the
+    model is told never to repeat). It has no reason to ever appear in a response.
+    Canary convention: tokens start with the prefix "SPCANARY-" followed by a random value, for example
+    SPCANARY-7f3c9a1e5b2d. Keeping to the prefix lets one rule cover every application and rotated token.
+    Change the prefix here if your tokens use a different one.
+    Only the model output field is inspected. The same token in the system instructions or the input
+    is expected and does not match.
+    Log format assumption: LLM gateway or application logs carrying OpenTelemetry GenAI semantic
+    convention attributes, with gen_ai.output.messages recorded as a JSON string.
+    No ATT&CK mapping exists for this behaviour. It is mapped to ATLAS only.
+    Allowlist hook: filters/llm_gateway_system_prompt_canary_in_output_allowlist.yml (for example
+    canary self-test traffic).
+references:
+    - https://atlas.mitre.org/techniques/AML.T0056
+    - https://github.com/open-telemetry/semantic-conventions-genai
+    - https://opentelemetry.io/docs/specs/semconv/gen-ai/gen-ai-spans/
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+atlas:
+    - AML.T0056
+logsource:
+    category: application
+    product: llm_gateway
+detection:
+    selection:
+        gen_ai.output.messages|contains: SPCANARY-
+    condition: selection
+falsepositives:
+    - Scheduled canary self-tests that deliberately make the model echo the token. Add their service or conversation identifiers to the allowlist filter.
+    - Applications that show the system prompt to users on purpose (the canary should not be planted there).
+level: high

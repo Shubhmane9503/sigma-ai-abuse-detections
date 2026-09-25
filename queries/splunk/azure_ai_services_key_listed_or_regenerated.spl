@@ -1,0 +1,1 @@
+OperationNameValue IN ("Microsoft.CognitiveServices/accounts/listKeys/action", "Microsoft.CognitiveServices/accounts/regenerateKey/action") ActivityStatusValue="Success" NOT (Caller IN ("00000000-0000-0000-0000-00000000a110", "allowlisted-key-rotation@example.com"))

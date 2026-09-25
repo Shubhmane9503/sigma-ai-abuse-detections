@@ -1,0 +1,1 @@
+from * metadata _id, _index, _version | where (OperationNameValue in ("Microsoft.CognitiveServices/accounts/listKeys/action", "Microsoft.CognitiveServices/accounts/regenerateKey/action")) and ActivityStatusValue=="Success" and not (Caller in ("00000000-0000-0000-0000-00000000a110", "allowlisted-key-rotation@example.com"))
