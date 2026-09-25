@@ -1,0 +1,32 @@
+# Splunk: web proxy events normalised to the Splunk CIM Web data model.
+# Maps the Sigma proxy taxonomy to CIM field names and restricts the search to events tagged "web".
+name: splunk-proxy-cim-web
+priority: 20
+transformations:
+  - id: splunk_proxy_cim_fields
+    type: field_name_mapping
+    mapping:
+      cs-host: url_domain
+      c-uri: url
+      c-uri-stem: uri_path
+      c-useragent: http_user_agent
+      cs-method: http_method
+      sc-status: status
+      src_ip: src
+      dst_ip: dest
+      cs-username: user
+    rule_conditions:
+      - type: logsource
+        category: proxy
+  - id: splunk_proxy_cim_unmapped
+    type: strict_field_mapping_failure
+    rule_conditions:
+      - type: logsource
+        category: proxy
+  - id: splunk_proxy_cim_tag
+    type: add_condition
+    conditions:
+      tag: web
+    rule_conditions:
+      - type: logsource
+        category: proxy

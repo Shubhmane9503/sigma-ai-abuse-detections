@@ -1,0 +1,113 @@
+title: AI Coding Agent Started With Approval Or Sandbox Bypass
+id: 29bff544-0b7d-4875-beb3-bbf39c5426e2
+status: experimental
+description: |
+    Detects coding-agent CLIs started with options that turn off human approval of tool calls or disable
+    the agent's sandbox. An agent running this way executes whatever the model decides, including commands
+    injected through a malicious repository, issue, web page or MCP tool result, with the user's full
+    privileges. Attackers who gain a foothold also launch local agents this way to have them carry out
+    tasks on the machine (ATLAS AML.T0112.000 Local AI Agent).
+    Flags last verified 2026-09-25 from the --help output of Claude Code 2.1.282, Codex CLI 0.157.0,
+    Gemini CLI 0.61.0 and GitHub Copilot CLI 1.0.88. Re-check monthly: these flags change quickly.
+    Agent-unique flags (--dangerously-skip-permissions, --dangerously-bypass-approvals-and-sandbox,
+    --dangerously-bypass-hook-trust, danger-full-access) match on their own. Generic-looking flags
+    (--yolo, -y, --allow-all, bypassPermissions, approval mode "never") only match when the command line also
+    identifies the agent. The Gemini CLI runs on Node.js, so the agent is identified from the command line,
+    not the image. The single-dash "-yolo" spelling is included because it was observed in Splunk's
+    ai_cli_override attack dataset.
+    Log format assumption: Sysmon-style process creation events (Image, CommandLine), Windows, Linux or macOS.
+    Allowlist hook: filters/proc_creation_ai_coding_agent_approval_bypass_allowlist.yml.
+references:
+    - https://docs.anthropic.com/en/docs/claude-code/cli-reference
+    - https://github.com/openai/codex/blob/main/docs/sandbox.md
+    - https://github.com/google-gemini/gemini-cli/blob/main/docs/cli/configuration.md
+    - https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli
+    - https://github.com/splunk/attack_data/tree/master/datasets/attack_techniques/T1480/ai_cli_override
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+tags:
+    - attack.defense-impairment
+    - attack.t1685
+atlas:
+    - AML.T0112.000
+logsource:
+    category: process_creation
+detection:
+    selection_unique_flags:
+        CommandLine|contains:
+            # Claude Code
+            - --dangerously-skip-permissions
+            - --allow-dangerously-skip-permissions
+            # Codex CLI (danger-full-access covers --sandbox, -s and -c sandbox_mode=)
+            - --dangerously-bypass-approvals-and-sandbox
+            - --dangerously-bypass-hook-trust
+            - danger-full-access
+    selection_claude_agent:
+        - Image|endswith:
+              - /claude
+              - \claude.exe
+        # Native installs run from <data dir>/claude/versions/<version>
+        - Image|contains:
+              - /claude/versions/
+              - \claude\versions\
+        - CommandLine|contains:
+              - '@anthropic-ai/claude-code'
+              - '@anthropic-ai\claude-code'
+    selection_claude_flag:
+        CommandLine|contains: bypassPermissions
+    selection_codex_agent:
+        - Image|endswith:
+              - /codex
+              - \codex.exe
+        - CommandLine|contains:
+              - '@openai/codex'
+              - '@openai\codex'
+              - /codex.js
+              - \codex.js
+    selection_codex_flag:
+        CommandLine|contains:
+            - --ask-for-approval never
+            - --ask-for-approval=never
+            - ' -a never'
+            - approval_policy=never
+            - approval_policy="never"
+    selection_gemini_agent:
+        - Image|endswith:
+              - /gemini
+              - \gemini.exe
+        - CommandLine|contains:
+              - /bin/gemini
+              - '@google/gemini-cli'
+              - '@google\gemini-cli'
+              - \gemini.cmd
+    selection_gemini_flag:
+        - CommandLine|contains:
+              - -yolo
+              - --approval-mode yolo
+              - --approval-mode=yolo
+              - ' -y '
+        - CommandLine|endswith: ' -y'
+    selection_copilot_agent:
+        - Image|endswith:
+              - /copilot
+              - \copilot.exe
+        - CommandLine|contains:
+              - '@github/copilot'
+              - '@github\copilot'
+              - /bin/copilot
+              - \copilot.cmd
+    selection_copilot_flag:
+        CommandLine|contains:
+            - --allow-all
+            - --yolo
+    condition: >
+        selection_unique_flags
+        or (selection_claude_agent and selection_claude_flag)
+        or (selection_codex_agent and selection_codex_flag)
+        or (selection_gemini_agent and selection_gemini_flag)
+        or (selection_copilot_agent and selection_copilot_flag)
+falsepositives:
+    - Agents deliberately run unattended inside disposable, externally sandboxed environments (CI runners, dev containers, VMs). Add those hosts or users to the allowlist filter.
+    - Developers who habitually run agents in bypass mode on their workstation. Treat this as a policy decision, not noise.
+level: medium

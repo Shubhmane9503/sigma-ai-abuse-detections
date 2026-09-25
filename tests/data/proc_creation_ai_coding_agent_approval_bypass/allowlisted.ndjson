@@ -1,0 +1,1 @@
+{"EventID":1,"UtcTime":"2026-09-22 02:00:00.000","ProcessId":300,"Image":"/usr/local/bin/codex","CommandLine":"codex exec --dangerously-bypass-approvals-and-sandbox \"run the nightly refactor\"","CurrentDirectory":"/workspace","User":"allowlisted-ci-sandbox","ParentImage":"/usr/bin/bash","ParentCommandLine":"bash /ci/run-agent.sh"}

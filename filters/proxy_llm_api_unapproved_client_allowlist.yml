@@ -1,0 +1,24 @@
+title: Allowlist - LLM API Request From Unapproved Client
+id: d2ac9e9d-558b-4abb-95d6-eab224bc82a6
+status: experimental
+description: |
+    Approved-clients list for rule b314ce26-154f-4801-aadd-0131f0c92a23. Every environment maintains its
+    own list of hosts (for example the AI gateway or sanctioned application servers) and users that may
+    call LLM APIs directly. Requests from anything else alert.
+    Replace the placeholder below (an RFC 5737 documentation address).
+    The list is keyed on src_ip because every proxy event has it. Many proxies leave cs-username empty
+    or absent, and in SQL-style backends such as ES|QL a NOT condition on an absent field drops the
+    event entirely. Only add a cs-username list if your proxy always authenticates users
+    (see docs/tuning.md).
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+logsource:
+    category: proxy
+filter:
+    rules:
+        - b314ce26-154f-4801-aadd-0131f0c92a23
+    approved_hosts:
+        src_ip:
+            - 192.0.2.10
+    condition: not approved_hosts

@@ -1,0 +1,19 @@
+title: Allowlist - AI Coding Agent Started With Approval Or Sandbox Bypass
+id: eb1dc145-8b6f-40a1-aeda-f1ef4270f658
+status: experimental
+description: |
+    Allowlist hook for rule 29bff544-0b7d-4875-beb3-bbf39c5426e2. Holds the accounts that run agents
+    unattended inside disposable, externally sandboxed environments (CI runners, dev containers).
+    Replace the placeholder user below. Match on the account used by the sandbox, not on developers' accounts.
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+logsource:
+    category: process_creation
+filter:
+    rules:
+        - 29bff544-0b7d-4875-beb3-bbf39c5426e2
+    selection:
+        User|endswith:
+            - allowlisted-ci-sandbox
+    condition: not selection

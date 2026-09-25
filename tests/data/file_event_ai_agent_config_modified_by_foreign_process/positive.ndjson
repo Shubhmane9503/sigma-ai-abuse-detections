@@ -1,0 +1,7 @@
+{"EventID":11,"UtcTime":"2026-09-22 10:00:01.120","ProcessId":4101,"Image":"/usr/bin/python3.12","TargetFilename":"/home/devuser/.claude/settings.json","User":"devuser"}
+{"EventID":11,"UtcTime":"2026-09-22 10:00:01.180","ProcessId":4101,"Image":"/usr/bin/python3.12","TargetFilename":"/home/devuser/.claude.json","User":"devuser"}
+{"EventID":11,"UtcTime":"2026-09-22 10:02:13.004","ProcessId":7312,"Image":"C:\\Users\\devuser\\AppData\\Local\\Temp\\setup-helper.exe","TargetFilename":"C:\\Users\\devuser\\AppData\\Roaming\\Claude\\claude_desktop_config.json","User":"EXAMPLE\\devuser"}
+{"EventID":11,"UtcTime":"2026-09-22 10:03:55.410","ProcessId":5120,"Image":"/bin/zsh","TargetFilename":"/Users/devuser/.cursor/mcp.json","User":"devuser"}
+{"EventID":11,"UtcTime":"2026-09-22 10:04:30.000","ProcessId":4188,"Image":"/usr/bin/curl","TargetFilename":"/home/devuser/src/project/.mcp.json","User":"devuser"}
+{"EventID":11,"UtcTime":"2026-09-22 10:05:00.000","ProcessId":6644,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","TargetFilename":"C:\\Users\\devuser\\.codex\\config.toml","User":"EXAMPLE\\devuser"}
+{"EventID":11,"UtcTime":"2026-09-22 10:06:00.000","ProcessId":4200,"Image":"/usr/local/bin/node","TargetFilename":"/home/devuser/.gemini/settings.json","User":"devuser"}

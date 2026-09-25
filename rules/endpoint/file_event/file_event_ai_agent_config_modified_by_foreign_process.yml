@@ -1,0 +1,92 @@
+title: AI Agent Or MCP Configuration Modified By Non-Agent Process
+id: 1d735fc6-dce5-4f29-bb2c-7e7413754b5d
+status: experimental
+description: |
+    Detects writes to coding-agent and MCP (Model Context Protocol) configuration files by a process that
+    is not the agent application itself. These files decide which MCP servers an agent starts (each one
+    an arbitrary command run with the user's privileges), which hooks run on agent events and which
+    permissions the agent has. A script, installer or malicious package that silently adds an MCP
+    server, a hook or an allow rule gets persistent code execution, and a path to exfiltration, every
+    time the developer starts the agent.
+    Covered files (paths last verified 2026-09-25 against Claude Code 2.1.282, Codex CLI 0.157.0 and
+    Gemini CLI 0.61.0 packages, and vendor docs for Claude Desktop, Cursor, Windsurf and VS Code):
+    Claude Code (.claude.json, .mcp.json, managed-mcp.json, .claude/settings.json,
+    .claude/settings.local.json), Claude Desktop (claude_desktop_config.json), Cursor (.cursor/mcp.json),
+    Windsurf (.codeium/windsurf/mcp_config.json), VS Code (.vscode/mcp.json), Gemini CLI
+    (.gemini/settings.json) and Codex CLI (.codex/config.toml). Re-check monthly: agent config locations change.
+    Agents that run on Node.js (Gemini CLI, npm-installed wrappers) write their config as "node" and will
+    alert when the user changes their own config. See the false positives and docs/tuning.md.
+    No ATT&CK technique is assigned yet. The rule is tagged with the Persistence tactic until one is chosen.
+    Log format assumption: Sysmon-style file creation events (Image, TargetFilename), Windows, Linux or macOS.
+    Allowlist hook: filters/file_event_ai_agent_config_modified_by_foreign_process_allowlist.yml.
+references:
+    - https://atlas.mitre.org/techniques/AML.T0081
+    - https://modelcontextprotocol.io/docs/develop/connect-local-servers
+    - https://docs.anthropic.com/en/docs/claude-code/settings
+    - https://docs.anthropic.com/en/docs/claude-code/mcp
+    - https://docs.cursor.com/context/model-context-protocol
+    - https://code.visualstudio.com/docs/copilot/customization/mcp-servers
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+tags:
+    - attack.persistence
+atlas:
+    - AML.T0081
+logsource:
+    category: file_event
+detection:
+    selection:
+        TargetFilename|endswith:
+            - /.claude.json
+            - \.claude.json
+            - /.mcp.json
+            - \.mcp.json
+            - /managed-mcp.json
+            - \managed-mcp.json
+            - /.claude/settings.json
+            - \.claude\settings.json
+            - /.claude/settings.local.json
+            - \.claude\settings.local.json
+            - /claude_desktop_config.json
+            - \claude_desktop_config.json
+            - /.cursor/mcp.json
+            - \.cursor\mcp.json
+            - /.codeium/windsurf/mcp_config.json
+            - \.codeium\windsurf\mcp_config.json
+            - /.vscode/mcp.json
+            - \.vscode\mcp.json
+            - /.gemini/settings.json
+            - \.gemini\settings.json
+            - /.codex/config.toml
+            - \.codex\config.toml
+    filter_main_agents:
+        Image|endswith:
+            # Claude Code (native binary) and Claude Desktop
+            - /claude
+            - \claude.exe
+            # Cursor, VS Code, Windsurf (main and extension-host helper processes)
+            - /cursor
+            - \cursor.exe
+            - /Cursor Helper (Plugin)
+            - /code
+            - \code.exe
+            - /Code Helper (Plugin)
+            - /windsurf
+            - \windsurf.exe
+            - /Windsurf Helper (Plugin)
+            # Codex CLI (native binary)
+            - /codex
+            - \codex.exe
+    filter_main_claude_native:
+        # The native installer's ~/.local/bin/claude launcher is a symlink into
+        # <data dir>/claude/versions/<version>, so the image ends in a version number.
+        Image|contains:
+            - /claude/versions/
+            - \claude\versions\
+    condition: selection and not 1 of filter_main_*
+falsepositives:
+    - Agents hosted by Node.js (for example Gemini CLI) writing their own configuration. The writing process is "node", which the rule cannot tell apart from any other Node.js script. Add node to the allowlist filter only if that trade-off is acceptable.
+    - Dotfile managers, configuration management (Ansible, chezmoi, Nix home-manager) and editors (vim, nano) used by the developer to edit these files. Add approved tools to the allowlist filter.
+    - Project checkouts that contain a .mcp.json or .vscode/mcp.json (git writes the file).
+level: medium

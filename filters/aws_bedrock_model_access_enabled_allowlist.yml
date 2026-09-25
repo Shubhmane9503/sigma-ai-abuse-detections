@@ -1,0 +1,25 @@
+title: Allowlist - AWS Bedrock Foundation Model Access Enabled
+id: 5465d746-1c77-440c-9a70-8ac00c3cefee
+status: experimental
+description: |
+    Allowlist hook for rule 076edd05-1150-4548-bc15-ea9458a69662. Holds the IAM roles that are allowed
+    to manage Bedrock model access (typically the AI platform team's admin role or account bootstrap
+    automation).
+    Entries match the start of userIdentity.arn: use "arn:aws:sts::<account>:assumed-role/<role>/" for
+    roles (any session) or "arn:aws:iam::<account>:user/<name>" for IAM users. userIdentity.arn is used
+    because it is present for every identity type. Filtering on a field that some events lack (such as
+    sessionContext.sessionIssuer.arn, absent for IAM users) makes SQL-style backends like ES|QL drop those
+    events entirely (see docs/tuning.md). The placeholder uses the AWS documentation account ID 111122223333.
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+logsource:
+    product: aws
+    service: cloudtrail
+filter:
+    rules:
+        - 076edd05-1150-4548-bc15-ea9458a69662
+    selection:
+        userIdentity.arn|startswith:
+            - 'arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/'
+    condition: not selection

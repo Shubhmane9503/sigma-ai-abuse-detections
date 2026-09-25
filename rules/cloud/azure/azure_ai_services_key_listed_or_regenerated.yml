@@ -1,0 +1,45 @@
+title: Azure AI Services Account Keys Listed Or Regenerated
+id: b6c6fdf8-23b1-4f1d-bb4d-0da6c28f664d
+status: experimental
+description: |
+    Detects listing or regeneration of the API keys of an Azure AI services account
+    (Microsoft.CognitiveServices/accounts, the resource type behind Azure OpenAI, Azure AI Foundry and
+    Azure AI services). Anyone holding such a key can run inference billed to the subscription.
+    Listing keys is the usual way stolen Azure credentials are turned into long-lived AI API keys, and
+    regenerating a key can lock the owner out or hide the theft.
+    What this adds over SigmaHQ's generic "Rare Subscription-level Operations In Azure" rule
+    (c1182e02-49a3-481c-b3de-0fadc4091488): that rule is a keyword match on listKeys across
+    several unrelated resource providers, has no regenerateKey coverage, no field scoping, no principal
+    allowlist and no AI mapping. This rule is scoped to the AI services resource provider, covers both
+    listing and regeneration, only counts successful operations, carries a principal allowlist filter,
+    and is mapped to ATLAS.
+    Log format assumption: the Azure Monitor AzureActivity table schema (Log Analytics / Microsoft Sentinel),
+    field names OperationNameValue, ActivityStatusValue and Caller.
+    Allowlist hook: filters/azure_ai_services_key_listed_or_regenerated_allowlist.yml.
+references:
+    - https://learn.microsoft.com/en-us/azure/ai-services/authentication
+    - https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/azureactivity
+    - https://learn.microsoft.com/en-us/rest/api/aiservices/accountmanagement/accounts/list-keys
+    - https://github.com/SigmaHQ/sigma/blob/master/rules/cloud/azure/activity_logs/azure_rare_operations.yml
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+tags:
+    - attack.credential-access
+    - attack.t1552
+atlas:
+    - AML.T0055
+logsource:
+    product: azure
+    service: activitylogs
+detection:
+    selection:
+        OperationNameValue:
+            - Microsoft.CognitiveServices/accounts/listKeys/action
+            - Microsoft.CognitiveServices/accounts/regenerateKey/action
+        ActivityStatusValue: Success
+    condition: selection
+falsepositives:
+    - Key rotation automation and deployment pipelines that read keys to configure applications. Add their service principal or managed identity to the allowlist filter.
+    - Administrators viewing keys in the Azure portal (the portal calls listKeys when the Keys and Endpoint blade is opened).
+level: medium

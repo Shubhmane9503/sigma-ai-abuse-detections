@@ -1,0 +1,50 @@
+# ES|QL: process creation and file events from Elastic Defend (logs-endpoint.events.*).
+# Maps Sysmon-style Sigma field names to ECS.
+name: esql-endpoint-elastic-defend
+priority: 20
+transformations:
+  - id: esql_process_index
+    type: set_state
+    key: index
+    val: logs-endpoint.events.process-*
+    rule_conditions:
+      - type: logsource
+        category: process_creation
+  - id: esql_file_index
+    type: set_state
+    key: index
+    val: logs-endpoint.events.file-*
+    rule_conditions:
+      - type: logsource
+        category: file_event
+  - id: esql_endpoint_fields
+    type: field_name_mapping
+    mapping:
+      Image: process.executable
+      CommandLine: process.command_line
+      CurrentDirectory: process.working_directory
+      User: user.name
+      ParentImage: process.parent.executable
+      ParentCommandLine: process.parent.command_line
+      TargetFilename: file.path
+    rule_conditions:
+      - type: logsource
+        category: process_creation
+      - type: logsource
+        category: file_event
+    rule_cond_op: or
+  - id: esql_endpoint_unmapped
+    type: strict_field_mapping_failure
+    rule_conditions:
+      - type: logsource
+        category: process_creation
+      - type: logsource
+        category: file_event
+    rule_cond_op: or
+  - id: esql_process_start
+    type: add_condition
+    conditions:
+      event.type: start
+    rule_conditions:
+      - type: logsource
+        category: process_creation

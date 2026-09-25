@@ -1,0 +1,41 @@
+title: AWS Bedrock Foundation Model Access Enabled
+id: 076edd05-1150-4548-bc15-ea9458a69662
+status: experimental
+description: |
+    Detects the CloudTrail calls made when access to an Amazon Bedrock foundation model is turned on:
+    submitting a model-access use case (PutUseCaseForModelAccess), accepting a Marketplace model
+    agreement (CreateFoundationModelAgreement) and granting the entitlement (PutFoundationModelEntitlement).
+    In LLMjacking intrusions, attackers holding stolen AWS credentials enable expensive models in an
+    account that never used them and then resell or consume the inference, leaving the victim with the bill.
+    Enabling model access is rare, usually done once per model by a platform team, and is a strong
+    precursor signal before any InvokeModel activity.
+    Log format assumption: raw CloudTrail JSON records (field names as delivered by CloudTrail).
+    Allowlist hook: filters/aws_bedrock_model_access_enabled_allowlist.yml.
+references:
+    - https://stratus-red-team.cloud/attack-techniques/AWS/aws.impact.bedrock-invoke-model/
+    - https://permiso.io/blog/exploiting-hosted-models
+    - https://sysdig.com/blog/llmjacking-stolen-cloud-credentials-used-in-new-ai-attack/
+    - https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+tags:
+    - attack.impact
+    - attack.t1496.004
+atlas:
+    - AML.T0034
+logsource:
+    product: aws
+    service: cloudtrail
+detection:
+    selection:
+        eventSource: bedrock.amazonaws.com
+        eventName:
+            - PutUseCaseForModelAccess
+            - CreateFoundationModelAgreement
+            - PutFoundationModelEntitlement
+    condition: selection
+falsepositives:
+    - A platform or ML team enabling a new foundation model for a sanctioned project. Add the principals that are allowed to manage model access to the allowlist filter.
+    - Account bootstrap automation (for example Landing Zone or Terraform pipelines) that enables a standard set of models.
+level: high

@@ -1,0 +1,20 @@
+title: Allowlist - System Prompt Canary Token Returned In LLM Output
+id: b2aaaead-6674-4c39-8752-27b482bc7175
+status: experimental
+description: |
+    Allowlist hook for rule fd16f09c-e2f8-40d2-9184-7c394d5e0611. Holds the services that deliberately
+    make a model echo its canary, such as a scheduled self-test that proves the canary pipeline works.
+    Replace the placeholder service name below.
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+logsource:
+    category: application
+    product: llm_gateway
+filter:
+    rules:
+        - fd16f09c-e2f8-40d2-9184-7c394d5e0611
+    selection:
+        service.name:
+            - allowlisted-canary-selftest
+    condition: not selection

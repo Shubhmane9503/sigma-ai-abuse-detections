@@ -1,0 +1,1 @@
+gen_ai.output.messages="*SPCANARY-*" NOT service.name="allowlisted-canary-selftest"

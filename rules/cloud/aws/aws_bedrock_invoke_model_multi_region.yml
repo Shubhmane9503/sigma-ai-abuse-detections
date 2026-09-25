@@ -1,0 +1,76 @@
+title: AWS Bedrock Model Invocation
+id: 7e8c1646-c28f-4b13-bfa8-2ea3cc37024f
+name: aws_bedrock_model_invocation
+status: experimental
+description: |
+    Base rule for the multi-region Bedrock invocation correlation below. Selects Bedrock runtime inference
+    calls recorded in CloudTrail. On its own this rule is far too noisy to alert on, so it is used
+    only as input to the correlation rule.
+    Log format assumption: raw CloudTrail JSON records.
+references:
+    - https://stratus-red-team.cloud/attack-techniques/AWS/aws.impact.bedrock-invoke-model/
+    - https://docs.aws.amazon.com/bedrock/latest/userguide/logging-using-cloudtrail.html
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+tags:
+    - attack.initial-access
+    - attack.t1078.004
+atlas:
+    - AML.T0040
+logsource:
+    product: aws
+    service: cloudtrail
+detection:
+    selection:
+        eventSource: bedrock.amazonaws.com
+        eventName:
+            - InvokeModel
+            - InvokeModelWithResponseStream
+            - Converse
+            - ConverseStream
+    condition: selection
+falsepositives:
+    - Every legitimate Bedrock inference call. Not intended to alert on its own.
+level: informational
+---
+title: AWS Bedrock Model Invoked From Three Or More Regions By One Identity Within One Hour
+id: 48136d7c-fcf0-43ce-ad6d-25c92fd7218f
+status: experimental
+description: |
+    Detects a single AWS identity invoking Amazon Bedrock models in three or more distinct AWS regions
+    within one hour. LLMjacking operators spread inference across regions to get around per-region
+    quotas and to use models that are only offered in some regions, while legitimate
+    applications are usually pinned to one or two regions (or use a cross-region inference profile
+    called from a single home region).
+    Correlation: value_count of awsRegion grouped by userIdentity.arn over a 1 hour timespan, threshold 3.
+    Note on backends: Splunk and ES|QL conversions use fixed 1 hour buckets (tumbling windows), so
+    activity straddling a bucket boundary can be missed. The repository's SQLite test harness checks a
+    sliding window explicitly (see docs/testing.md).
+    Allowlist hook: filters/aws_bedrock_invoke_model_multi_region_allowlist.yml (applied to the base rule).
+references:
+    - https://stratus-red-team.cloud/attack-techniques/AWS/aws.impact.bedrock-invoke-model/
+    - https://sysdig.com/blog/growing-dangers-of-llmjacking/
+    - https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html
+author: Shubham Mane
+date: 2026-09-25
+modified: 2026-09-25
+tags:
+    - attack.initial-access
+    - attack.t1078.004
+atlas:
+    - AML.T0040
+correlation:
+    type: value_count
+    rules:
+        - aws_bedrock_model_invocation
+    group-by:
+        - userIdentity.arn
+    timespan: 1h
+    condition:
+        gte: 3
+        field: awsRegion
+falsepositives:
+    - Global applications that deliberately call Bedrock in several regions from one role (for example a multi-region failover design). Add the role to the allowlist filter.
+    - Model evaluation or benchmarking jobs that iterate over regions.
+level: high

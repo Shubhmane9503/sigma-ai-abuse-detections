@@ -1,0 +1,1 @@
+from * metadata _id, _index, _version | where gen_ai.output.messages like "*SPCANARY-*" and not service.name=="allowlisted-canary-selftest"

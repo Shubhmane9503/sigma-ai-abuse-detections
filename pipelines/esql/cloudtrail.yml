@@ -1,0 +1,38 @@
+# ES|QL: AWS CloudTrail as ingested by Elastic's AWS integration (data stream logs-aws.cloudtrail-*).
+# Maps CloudTrail JSON field names to the ECS / aws.cloudtrail.* fields that integration produces.
+# Any CloudTrail field used by a rule but missing here fails conversion instead of silently
+# producing a query on a field that does not exist.
+name: esql-cloudtrail-elastic-aws
+priority: 20
+transformations:
+  - id: esql_cloudtrail_index
+    type: set_state
+    key: index
+    val: logs-aws.cloudtrail-*
+    rule_conditions:
+      - type: logsource
+        product: aws
+        service: cloudtrail
+  - id: esql_cloudtrail_fields
+    type: field_name_mapping
+    mapping:
+      eventSource: event.provider
+      eventName: event.action
+      awsRegion: cloud.region
+      sourceIPAddress: source.address
+      userAgent: user_agent.original
+      errorCode: aws.cloudtrail.error_code
+      userIdentity.arn: aws.cloudtrail.user_identity.arn
+      userIdentity.type: aws.cloudtrail.user_identity.type
+      userIdentity.accessKeyId: aws.cloudtrail.user_identity.access_key_id
+      userIdentity.sessionContext.sessionIssuer.arn: aws.cloudtrail.user_identity.session_context.session_issuer.arn
+    rule_conditions:
+      - type: logsource
+        product: aws
+        service: cloudtrail
+  - id: esql_cloudtrail_unmapped
+    type: strict_field_mapping_failure
+    rule_conditions:
+      - type: logsource
+        product: aws
+        service: cloudtrail

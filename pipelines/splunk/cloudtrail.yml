@@ -1,0 +1,14 @@
+# Splunk: AWS CloudTrail as ingested by the Splunk Add-on for AWS (sourcetype aws:cloudtrail).
+# The add-on keeps CloudTrail's JSON field names (eventName, userIdentity.arn, ...), so only the
+# source condition is added. Change the sourcetype if your CloudTrail data arrives differently.
+name: splunk-cloudtrail
+priority: 20
+transformations:
+  - id: splunk_cloudtrail_sourcetype
+    type: add_condition
+    conditions:
+      sourcetype: aws:cloudtrail
+    rule_conditions:
+      - type: logsource
+        product: aws
+        service: cloudtrail

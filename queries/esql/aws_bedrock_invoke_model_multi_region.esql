@@ -1,0 +1,3 @@
+from logs-aws.cloudtrail-* metadata _id, _index, _version | where event.provider=="bedrock.amazonaws.com" and (event.action in ("InvokeModel", "InvokeModelWithResponseStream", "Converse", "ConverseStream")) and not starts_with(aws.cloudtrail.user_identity.arn, "arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/")
+| eval timebucket=date_trunc(1hours, @timestamp) | stats value_count=count_distinct(cloud.region) by timebucket, aws.cloudtrail.user_identity.arn
+| where value_count >= 3
