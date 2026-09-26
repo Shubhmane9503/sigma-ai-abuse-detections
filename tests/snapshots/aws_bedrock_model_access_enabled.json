@@ -1,16 +1,18 @@
 {
   "rule": "rules/cloud/aws/aws_bedrock_model_access_enabled.yml",
-  "filter": "filters/aws_bedrock_model_access_enabled_allowlist.yml",
+  "filters": [
+    "filters/aws_bedrock_model_access_enabled_allowlist.yml"
+  ],
   "splunk": [
-    "sourcetype=\"aws:cloudtrail\" eventSource=\"bedrock.amazonaws.com\" eventName IN (\"PutUseCaseForModelAccess\", \"CreateFoundationModelAgreement\", \"PutFoundationModelEntitlement\") NOT userIdentity.arn=\"arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/*\""
+    "sourcetype=\"aws:cloudtrail\" eventSource=\"bedrock.amazonaws.com\" eventName IN (\"PutUseCaseForModelAccess\", \"CreateFoundationModelAgreement\") OR eventName=\"PutFoundationModelEntitlement\" NOT userIdentity.arn=\"arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/*\""
   ],
   "esql": [
-    "from logs-aws.cloudtrail-* metadata _id, _index, _version | where event.provider==\"bedrock.amazonaws.com\" and (event.action in (\"PutUseCaseForModelAccess\", \"CreateFoundationModelAgreement\", \"PutFoundationModelEntitlement\")) and not starts_with(aws.cloudtrail.user_identity.arn, \"arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/\")"
+    "from logs-aws.cloudtrail-* metadata _id, _index, _version | where to_lower(event.provider) == \"bedrock.amazonaws.com\" and (to_lower(event.action) in (\"putusecaseformodelaccess\", \"createfoundationmodelagreement\") or to_lower(event.action) == \"putfoundationmodelentitlement\") and not starts_with(to_lower(aws.cloudtrail.user_identity.arn), \"arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/\")"
   ],
   "golang_expr": [
     "lower(eventSource) == lower(\"bedrock.amazonaws.com\") and (lower(eventName) == lower(\"PutUseCaseForModelAccess\") or lower(eventName) == lower(\"CreateFoundationModelAgreement\") or lower(eventName) == lower(\"PutFoundationModelEntitlement\")) and not (lower(userIdentity?.arn) startsWith lower(\"arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/\"))"
   ],
   "sqlite": [
-    "SELECT * FROM <TABLE_NAME> WHERE (eventSource='bedrock.amazonaws.com' AND (eventName='PutUseCaseForModelAccess' OR eventName='CreateFoundationModelAgreement' OR eventName='PutFoundationModelEntitlement')) AND (NOT `userIdentity.arn` LIKE 'arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/%' ESCAPE '\\')"
+    "SELECT * FROM <TABLE_NAME> WHERE (eventSource='bedrock.amazonaws.com' AND ((eventName='PutUseCaseForModelAccess' OR eventName='CreateFoundationModelAgreement') OR eventName='PutFoundationModelEntitlement')) AND (NOT `userIdentity.arn` LIKE 'arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/%' ESCAPE '\\')"
   ]
 }

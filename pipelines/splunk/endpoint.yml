@@ -1,0 +1,32 @@
+# Splunk: Sysmon process creation (Event ID 1) and file creation (Event ID 11) events, Windows or
+# Linux, with Sysmon field names (Image, CommandLine, TargetFilename, ...).
+# The EventCode condition keeps file_event rules from also matching Sysmon file delete events
+# (Event IDs 23 and 26), which carry the same TargetFilename field.
+# index="sysmon" is a PLACEHOLDER: replace it with the index (or sourcetype) holding your Sysmon data.
+name: splunk-endpoint-sysmon
+priority: 20
+transformations:
+  - id: splunk_sysmon_index
+    type: add_condition
+    conditions:
+      index: sysmon
+    rule_conditions:
+      - type: logsource
+        category: process_creation
+      - type: logsource
+        category: file_event
+    rule_cond_op: or
+  - id: splunk_sysmon_process_creation
+    type: add_condition
+    conditions:
+      EventCode: 1
+    rule_conditions:
+      - type: logsource
+        category: process_creation
+  - id: splunk_sysmon_file_create
+    type: add_condition
+    conditions:
+      EventCode: 11
+    rule_conditions:
+      - type: logsource
+        category: file_event

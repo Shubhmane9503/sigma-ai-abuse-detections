@@ -4,6 +4,6 @@ Hand-crafted Sysmon-style file creation events (`EventID` 11, `Image`, `TargetFi
 
 | File | Content |
 |---|---|
-| `positive.ndjson` | Python, an unknown Windows executable, zsh, curl, PowerShell and node writing Claude Code, Claude Desktop, Cursor, project `.mcp.json`, Codex and Gemini configuration files. |
+| `positive.ndjson` | Python, an unknown Windows executable, zsh, curl, PowerShell and node writing Claude Code, Claude Desktop, Cursor, project `.mcp.json`, Codex and Gemini configuration files. Two spoofed binaries named `code` and `claude` outside any agent install location, which the old basename exclusion would have let through. |
 | `negative.ndjson` | The agents themselves writing their own configuration (native and npm Claude Code, Claude Desktop, Cursor, the VS Code extension host, Codex), plus non-agent processes writing unrelated files with similar names. |
 | `allowlisted.ndjson` | The placeholder approved configuration manager writing `.claude/settings.json`. |

@@ -1,1 +1,1 @@
-from * metadata _id, _index, _version | where gen_ai.output.messages like "*SPCANARY-*" and not service.name=="allowlisted-canary-selftest"
+from * metadata _id, _index, _version | where to_lower(gen_ai.output.messages) like "*spcanary-*" and not to_lower(service.name) == "allowlisted-canary-selftest" and to_lower(gen_ai.output.messages) like "*spcanary-7f3c9a1e5b2d*" and not (gen_ai.input.messages is not null and to_lower(gen_ai.input.messages) like "*spcanary-7f3c9a1e5b2d*")

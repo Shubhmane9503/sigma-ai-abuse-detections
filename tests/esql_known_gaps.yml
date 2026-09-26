@@ -1,0 +1,9 @@
+# Known, documented cases where a committed ES|QL query does not behave like the Sigma rule.
+# tests/test_esql_execution.py marks these as xfail(strict=True): if the gap disappears the
+# test fails, so this file has to be updated. docs/coverage.md shows "known gap" for
+# these rules instead of "tested".
+#
+# Format:
+#   <rule file stem>:
+#     <sample kind: positive | negative | allowlisted>: <reason>
+{}

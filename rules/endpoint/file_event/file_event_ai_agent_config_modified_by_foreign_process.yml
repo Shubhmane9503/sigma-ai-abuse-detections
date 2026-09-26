@@ -28,7 +28,7 @@ references:
     - https://code.visualstudio.com/docs/copilot/customization/mcp-servers
 author: Shubham Mane
 date: 2026-09-25
-modified: 2026-09-25
+modified: 2026-09-26
 tags:
     - attack.persistence
 atlas:
@@ -60,33 +60,56 @@ detection:
             - \.gemini\settings.json
             - /.codex/config.toml
             - \.codex\config.toml
-    filter_main_agents:
-        Image|endswith:
-            # Claude Code (native binary) and Claude Desktop
-            - /claude
-            - \claude.exe
-            # Cursor, VS Code, Windsurf (main and extension-host helper processes)
-            - /cursor
-            - \cursor.exe
-            - /Cursor Helper (Plugin)
-            - /code
-            - \code.exe
-            - /Code Helper (Plugin)
-            - /windsurf
-            - \windsurf.exe
-            - /Windsurf Helper (Plugin)
-            # Codex CLI (native binary)
-            - /codex
-            - \codex.exe
+    # Agents are excluded by full install location, not by file name: excluding any image that
+    # merely ends in "/code" or "/claude" would let a dropped binary with that name write the files.
     filter_main_claude_native:
-        # The native installer's ~/.local/bin/claude launcher is a symlink into
-        # <data dir>/claude/versions/<version>, so the image ends in a version number.
+        # Native installer: <data dir>/claude/versions/<version> (~/.local/bin/claude is a symlink)
         Image|contains:
-            - /claude/versions/
-            - \claude\versions\
+            - /.local/share/claude/versions/
+            - \.local\share\claude\versions\
+    filter_main_npm_agents:
+        # npm-installed Claude Code and Codex platform binaries
+        Image|contains:
+            - /node_modules/@anthropic-ai/claude-code
+            - \node_modules\@anthropic-ai\claude-code
+            - /node_modules/@openai/codex
+            - \node_modules\@openai\codex
+    filter_main_macos_apps:
+        Image|startswith:
+            - /Applications/Claude.app/Contents/
+            - /Applications/Cursor.app/Contents/
+            - /Applications/Visual Studio Code.app/Contents/
+            - /Applications/Windsurf.app/Contents/
+    filter_main_windows_user_apps:
+        # %LOCALAPPDATA% per-user installs
+        Image|contains:
+            - \AppData\Local\AnthropicClaude\
+            - \AppData\Local\Programs\cursor\
+            - \AppData\Local\Programs\Microsoft VS Code\
+            - \AppData\Local\Programs\Windsurf\
+    filter_main_windows_system_apps:
+        Image|startswith:
+            - C:\Program Files\Microsoft VS Code\
+    filter_main_linux_apps:
+        Image|startswith:
+            - /usr/share/code/
+            - /snap/code/
+            - /usr/share/cursor/
+            - /opt/Cursor/
+            - /usr/share/windsurf/
     condition: selection and not 1 of filter_main_*
 falsepositives:
-    - Agents hosted by Node.js (for example Gemini CLI) writing their own configuration. The writing process is "node", which the rule cannot tell apart from any other Node.js script. Add node to the allowlist filter only if that trade-off is acceptable.
-    - Dotfile managers, configuration management (Ansible, chezmoi, Nix home-manager) and editors (vim, nano) used by the developer to edit these files. Add approved tools to the allowlist filter.
+    - >-
+      Agents hosted by Node.js (for example Gemini CLI) writing their own configuration. The writing process is "node", which the rule cannot tell apart from
+      any other Node.js script. Add node to the allowlist filter only if that trade-off is acceptable.
+    - >-
+      Dotfile managers, configuration management (Ansible, chezmoi, Nix home-manager) and editors (vim, nano) used by the developer to edit these files. Add
+      approved tools to the allowlist filter.
     - Project checkouts that contain a .mcp.json or .vscode/mcp.json (git writes the file).
+    - >-
+      Agents installed in locations not listed in the filters (portable builds, AppImages, custom prefixes). Add their full install path to the allowlist
+      filter.
+    - >-
+      Residual spoofing risk: per-user install locations (~/.local/share, %LOCALAPPDATA%) are writable by the user, so malware running as that user can still
+      place a binary there. System-wide locations (/Applications, C:\Program Files, /usr/share) require elevation.
 level: medium

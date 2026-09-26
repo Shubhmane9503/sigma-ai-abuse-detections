@@ -1,1 +1,1 @@
-sourcetype="aws:cloudtrail" eventSource="bedrock.amazonaws.com" eventName IN ("PutUseCaseForModelAccess", "CreateFoundationModelAgreement", "PutFoundationModelEntitlement") NOT userIdentity.arn="arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/*"
+sourcetype="aws:cloudtrail" eventSource="bedrock.amazonaws.com" eventName IN ("PutUseCaseForModelAccess", "CreateFoundationModelAgreement") OR eventName="PutFoundationModelEntitlement" NOT userIdentity.arn="arn:aws:sts::111122223333:assumed-role/allowlisted-ai-platform-admin/*"

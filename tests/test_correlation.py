@@ -18,8 +18,13 @@ def test_there_is_at_least_one_correlation_rule():
 
 @pytest.mark.parametrize("case", CORRELATION_RULES, ids=str)
 def test_positive_samples_alert(case):
+    """Every group in the positive file must alert, including bursts that straddle an hour boundary."""
     alerts = windowed_correlation_alerts(case, "positive")
     assert alerts, f"{case.stem}: no correlation alert on tests/data/{case.stem}/positive.ndjson"
+    unbounded = windowed_correlation_alerts(case, "positive", ignore_timespan=True)
+    alerted = {tuple(sorted(a["group"].items())) for a in alerts}
+    missing = [a["group"] for a in unbounded if tuple(sorted(a["group"].items())) not in alerted]
+    assert not missing, f"{case.stem}: positive groups that did not alert within the timespan: {missing}"
 
 
 @pytest.mark.parametrize("case", CORRELATION_RULES, ids=str)

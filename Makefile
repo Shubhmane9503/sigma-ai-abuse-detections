@@ -11,12 +11,14 @@ JSON_MATCHER_REPO   := https://github.com/SigmaHQ/json_matcher
 JSON_MATCHER_COMMIT := 3bb3022bbe093cab0edf81d48ee4559548645d72
 JSON_MATCHER        := $(BIN)/json_matcher
 
-.PHONY: help setup check test convert snapshots mappings matrix scrub framework-data framework-check demo clean
+.PHONY: help setup lint check test test-esql convert snapshots mappings matrix scrub framework-data framework-check demo clean
 
 help:
 	@echo "make setup            create $(VENV), install pinned tools, build json_matcher"
+	@echo "make lint             yamllint over rules, filters, pipelines and workflows"
 	@echo "make check            sigma check over rules/ and filters/ (issues fail the build)"
 	@echo "make test             sigma check + full pytest suite"
+	@echo "make test-esql        run committed ES|QL queries on Elasticsearch (needs ESQL_TEST_URL)"
 	@echo "make convert          regenerate queries/ (Splunk SPL, Elastic ES|QL)"
 	@echo "make snapshots        regenerate queries/ and tests/snapshots/ after an intentional change"
 	@echo "make mappings         validate ATT&CK / ATLAS IDs against pinned data"
@@ -38,11 +40,20 @@ $(JSON_MATCHER): | $(PY)
 	git -C build/json_matcher checkout --quiet $(JSON_MATCHER_COMMIT)
 	cd build/json_matcher && GOTOOLCHAIN=auto go build -o $(abspath $(JSON_MATCHER)) .
 
+lint:
+	$(BIN)/yamllint --strict rules filters pipelines .github .yamllint
+
 check:
 	$(PY) scripts/sigma_check.py --fail-on-issues rules/ filters/
 
-test: check
+test: lint check
 	$(PY) -m pytest
+
+# Needs an Elasticsearch 9.x node, e.g.
+#   docker run -d -p 9200:9200 -e discovery.type=single-node -e xpack.security.enabled=false elasticsearch:9.1.5
+test-esql:
+	@test -n "$(ESQL_TEST_URL)" || (echo "set ESQL_TEST_URL, e.g. ESQL_TEST_URL=http://localhost:9200" && exit 1)
+	ESQL_TEST_URL=$(ESQL_TEST_URL) $(PY) -m pytest tests/test_esql_execution.py
 
 convert:
 	$(PY) scripts/conversions.py --queries-only

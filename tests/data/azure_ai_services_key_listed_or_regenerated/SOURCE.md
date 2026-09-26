@@ -4,6 +4,6 @@ Hand-crafted records in the Azure Monitor [AzureActivity table schema](https://l
 
 | File | Content |
 |---|---|
-| `positive.ndjson` | Successful `listKeys` by a user (operation name in upper case, as the AzureActivity table often records it) and successful `regenerateKey` by a service principal on a `Microsoft.CognitiveServices/accounts` resource. |
+| `positive.ndjson` | Successful `listKeys` by a user (operation name in upper case, as the AzureActivity table often records it) and successful `regenerateKey` by a service principal on a `Microsoft.CognitiveServices/accounts` resource, plus a `listKeys` with status `Succeeded` (AzureActivity records both `Success` and `Succeeded`). |
 | `negative.ndjson` | `listKeys` with status `Start` and `Failure`, other Cognitive Services operations (`accounts/write`, `deployments/write`), and `listKeys` on a storage account (a different resource provider). |
 | `allowlisted.ndjson` | `listKeys` and `regenerateKey` by the two placeholder principals in the allowlist filter. |

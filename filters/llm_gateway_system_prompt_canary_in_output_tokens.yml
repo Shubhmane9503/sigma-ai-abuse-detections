@@ -1,0 +1,33 @@
+title: Deployment Tokens - System Prompt Canary Token Returned In LLM Output
+id: 99820d42-93ef-4680-8655-0939daa55d05
+status: experimental
+description: |
+    Deployment token list for rule fd16f09c-e2f8-40d2-9184-7c394d5e0611. It narrows the rule from
+    "any SPCANARY- string" to the canary tokens actually planted in your system prompts. Without it,
+    anyone can trigger the rule by getting the model to print the public prefix.
+    Keep this file private (do not publish it with your rules). Use long random tokens, one or more per
+    application, for example "SPCANARY-" followed by 12+ random hex characters, or an HMAC of the
+    application name under a secret key so tokens can be re-derived. Rotate them if they leak.
+    The token below is the repository's test placeholder. Replace it.
+    A leak is only reported when the token is in the output and not in the same request's input, so a
+    user who already has the token and asks the model to repeat it does not alert. With several tokens
+    listed, a request whose input contains any of them is excluded. The gen_ai.input.messages|exists
+    guard keeps the exclusion null-safe in SQL-style backends when input content is not logged (it is
+    opt-in in the OpenTelemetry GenAI conventions).
+author: Shubham Mane
+date: 2026-09-26
+modified: 2026-09-26
+logsource:
+    category: application
+    product: llm_gateway
+filter:
+    rules:
+        - fd16f09c-e2f8-40d2-9184-7c394d5e0611
+    token_in_output:
+        gen_ai.output.messages|contains:
+            - SPCANARY-7f3c9a1e5b2d
+    token_in_input:
+        gen_ai.input.messages|exists: true
+        gen_ai.input.messages|contains:
+            - SPCANARY-7f3c9a1e5b2d
+    condition: token_in_output and not token_in_input

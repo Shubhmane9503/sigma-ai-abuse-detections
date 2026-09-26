@@ -1,6 +1,6 @@
 sourcetype="aws:cloudtrail" eventSource="bedrock.amazonaws.com" eventName IN ("InvokeModel", "InvokeModelWithResponseStream", "Converse", "ConverseStream") NOT userIdentity.arn="arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/*"
 
-| bin _time span=1h
-| stats dc(awsRegion) as value_count by _time userIdentity.arn
+| sort 0 _time
+| streamstats time_window=1h dc(awsRegion) as value_count by userIdentity.arn
 
 | search value_count >= 3

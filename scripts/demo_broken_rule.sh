@@ -26,4 +26,4 @@ if JSON_MATCHER="${ROOT}/.venv/bin/json_matcher" "$PY" -m pytest -q -p no:cachep
     exit 1
 fi
 echo
-echo "As expected, the tests failed: a pull request with this change would be blocked."
+echo "As expected, the tests failed: a pull request with this change would show a failing CI check."

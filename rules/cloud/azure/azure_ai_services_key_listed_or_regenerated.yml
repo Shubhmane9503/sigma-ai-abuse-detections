@@ -14,16 +14,21 @@ description: |
     listing and regeneration, only counts successful operations, carries a principal allowlist filter,
     and is mapped to ATLAS.
     Log format assumption: the Azure Monitor AzureActivity table schema (Log Analytics / Microsoft Sentinel),
-    field names OperationNameValue, ActivityStatusValue and Caller.
+    field names OperationNameValue, ActivityStatusValue and Caller. This differs from SigmaHQ's
+    azure/activitylogs convention (operationName, as exported by diagnostic settings) and from the
+    field names of the Splunk and Elastic Azure add-ons. There is no Splunk or ES|QL pipeline for this log
+    source, so the committed Splunk and ES|QL queries use these AzureActivity names on all indexes and
+    need a field mapping (and an index restriction) before use anywhere other than AzureActivity data.
     Allowlist hook: filters/azure_ai_services_key_listed_or_regenerated_allowlist.yml.
 references:
     - https://learn.microsoft.com/en-us/azure/ai-services/authentication
     - https://learn.microsoft.com/en-us/azure/azure-monitor/reference/tables/azureactivity
     - https://learn.microsoft.com/en-us/rest/api/aiservices/accountmanagement/accounts/list-keys
     - https://github.com/SigmaHQ/sigma/blob/master/rules/cloud/azure/activity_logs/azure_rare_operations.yml
+    - https://github.com/Azure/Azure-Sentinel/issues/4350
 author: Shubham Mane
 date: 2026-09-25
-modified: 2026-09-25
+modified: 2026-09-26
 tags:
     - attack.credential-access
     - attack.t1552
@@ -37,9 +42,14 @@ detection:
         OperationNameValue:
             - Microsoft.CognitiveServices/accounts/listKeys/action
             - Microsoft.CognitiveServices/accounts/regenerateKey/action
-        ActivityStatusValue: Success
+        # AzureActivity records both spellings (Azure-Sentinel issue #4350 / PR #7260).
+        ActivityStatusValue:
+            - Success
+            - Succeeded
     condition: selection
 falsepositives:
-    - Key rotation automation and deployment pipelines that read keys to configure applications. Add their service principal or managed identity to the allowlist filter.
+    - >-
+      Key rotation automation and deployment pipelines that read keys to configure applications. Add their service principal or managed identity to the
+      allowlist filter.
     - Administrators viewing keys in the Azure portal (the portal calls listKeys when the Keys and Endpoint blade is opened).
 level: medium

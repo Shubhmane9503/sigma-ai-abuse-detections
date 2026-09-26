@@ -7,18 +7,23 @@ description: |
     sanctioned use ("shadow AI"), including malware or scripts using an LLM API as a
     command-and-control, tasking or exfiltration channel.
     The rule matches API hostnames only, not the providers' consumer chat websites, so browsing to a
-    chat UI does not trigger it. The list is intentionally limited to widely used providers. Extend it
-    with the providers relevant to your environment.
+    chat UI does not trigger it. The list is intentionally limited to widely used providers, including
+    the Amazon Bedrock runtime, Google Vertex AI and Hugging Face inference endpoints. Extend it with the
+    providers relevant to your environment. Hosts logged with a port by CONNECT tunnels
+    (api.openai.com:443) are covered.
+    Level is low because every LLM API call alerts until the approved-clients filter is populated. Raise
+    it to medium once the filter holds your sanctioned clients. Bedrock runtime and Vertex AI calls from
+    cloud workloads usually do not cross the web proxy. Traffic that does is worth a look.
     Log format assumption: web proxy logs using the Sigma proxy taxonomy (cs-host, src_ip, cs-username).
     Allowlist hook: filters/proxy_llm_api_unapproved_client_allowlist.yml holds the approved
-    hosts and users. Until it is populated, every LLM API request alerts.
+    hosts (by source IP). Until it is populated, every LLM API request alerts.
 references:
     - https://atlas.mitre.org/techniques/AML.T0096
     - https://attack.mitre.org/techniques/T1102/
     - https://attack.mitre.org/techniques/T1567/
 author: Shubham Mane
 date: 2026-09-25
-modified: 2026-09-25
+modified: 2026-09-26
 tags:
     - attack.command-and-control
     - attack.t1102
@@ -29,6 +34,8 @@ atlas:
 logsource:
     category: proxy
 detection:
+    # Hostnames verified 2026-09-26: provider docs for the direct APIs; botocore endpoint rules
+    # (bedrock-runtime), google-cloud-aiplatform constants (Vertex AI) and huggingface_hub constants.
     selection_exact:
         cs-host:
             - api.openai.com
@@ -45,12 +52,57 @@ detection:
             - api.x.ai
             - api.perplexity.ai
             - api.fireworks.ai
+            - aiplatform.googleapis.com
+            - router.huggingface.co
+            - api-inference.huggingface.co
+    selection_exact_connect:
+        # CONNECT logging records host:port, for example api.openai.com:443
+        cs-host|startswith:
+            - 'api.openai.com:'
+            - 'api.anthropic.com:'
+            - 'generativelanguage.googleapis.com:'
+            - 'api.mistral.ai:'
+            - 'api.cohere.com:'
+            - 'api.cohere.ai:'
+            - 'api.groq.com:'
+            - 'api.together.xyz:'
+            - 'api.together.ai:'
+            - 'openrouter.ai:'
+            - 'api.deepseek.com:'
+            - 'api.x.ai:'
+            - 'api.perplexity.ai:'
+            - 'api.fireworks.ai:'
+            - 'aiplatform.googleapis.com:'
+            - 'router.huggingface.co:'
+            - 'api-inference.huggingface.co:'
     selection_suffix:
         cs-host|endswith:
             - .openai.azure.com
             - .services.ai.azure.com
+            - -aiplatform.googleapis.com
+            - .endpoints.huggingface.cloud
+            - .openai.azure.com:443
+            - .services.ai.azure.com:443
+            - -aiplatform.googleapis.com:443
+            - .endpoints.huggingface.cloud:443
+    selection_bedrock_runtime:
+        # bedrock-runtime[-fips].<region>.amazonaws.com, dual-stack <...>.api.aws
+        cs-host|startswith: bedrock-runtime
+        cs-host|endswith:
+            - .amazonaws.com
+            - .amazonaws.com:443
+            - .amazonaws.com.cn
+            - .amazonaws.com.cn:443
+            - .api.aws
+            - .api.aws:443
+    selection_vertex_regional:
+        # aiplatform.<geo>.rep.googleapis.com
+        cs-host|startswith: aiplatform.
+        cs-host|endswith:
+            - .rep.googleapis.com
+            - .rep.googleapis.com:443
     condition: 1 of selection_*
 falsepositives:
     - Sanctioned applications, developer workstations and AI gateways that call LLM APIs. Add them to the allowlist filter by source IP or user.
     - Browser extensions and desktop apps with built-in AI features that call provider APIs directly.
-level: medium
+level: low

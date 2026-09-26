@@ -73,9 +73,17 @@ def test_rule_has_allowlist_filter_targeting_it(case):
 
 
 def test_no_orphan_filters():
-    stems = {case.stem for case in CASES}
-    orphans = sorted(p.name for p in FILTERS_DIR.glob("*.yml") if p.stem.removesuffix("_allowlist") not in stems)
+    owned = {path for case in CASES for path in case.filter_paths}
+    orphans = sorted(p.name for p in FILTERS_DIR.glob("*.yml") if p not in owned)
     assert not orphans, f"filters without a rule: {orphans}"
+
+
+@pytest.mark.parametrize("case", CASES, ids=str)
+def test_every_filter_targets_its_rule(case):
+    rule_ids = {doc["id"] for doc in documents(case.path)}
+    for path in case.filter_paths:
+        targets = set(documents(path)[0]["filter"]["rules"])
+        assert targets & rule_ids, f"{path.name} does not reference any rule in {case.path.name}"
 
 
 @pytest.mark.parametrize("case", CASES, ids=str)

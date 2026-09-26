@@ -1,11 +1,13 @@
 {
   "rule": "rules/cloud/aws/aws_bedrock_invoke_model_multi_region.yml",
-  "filter": "filters/aws_bedrock_invoke_model_multi_region_allowlist.yml",
+  "filters": [
+    "filters/aws_bedrock_invoke_model_multi_region_allowlist.yml"
+  ],
   "splunk": [
-    "sourcetype=\"aws:cloudtrail\" eventSource=\"bedrock.amazonaws.com\" eventName IN (\"InvokeModel\", \"InvokeModelWithResponseStream\", \"Converse\", \"ConverseStream\") NOT userIdentity.arn=\"arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/*\"\n\n| bin _time span=1h\n| stats dc(awsRegion) as value_count by _time userIdentity.arn\n\n| search value_count >= 3"
+    "sourcetype=\"aws:cloudtrail\" eventSource=\"bedrock.amazonaws.com\" eventName IN (\"InvokeModel\", \"InvokeModelWithResponseStream\", \"Converse\", \"ConverseStream\") NOT userIdentity.arn=\"arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/*\"\n\n| sort 0 _time\n| streamstats time_window=1h dc(awsRegion) as value_count by userIdentity.arn\n\n| search value_count >= 3"
   ],
   "esql": [
-    "from logs-aws.cloudtrail-* metadata _id, _index, _version | where event.provider==\"bedrock.amazonaws.com\" and (event.action in (\"InvokeModel\", \"InvokeModelWithResponseStream\", \"Converse\", \"ConverseStream\")) and not starts_with(aws.cloudtrail.user_identity.arn, \"arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/\")\n| eval timebucket=date_trunc(1hours, @timestamp) | stats value_count=count_distinct(cloud.region) by timebucket, aws.cloudtrail.user_identity.arn\n| where value_count >= 3"
+    "from logs-aws.cloudtrail-* metadata _id, _index, _version | where to_lower(event.provider) == \"bedrock.amazonaws.com\" and (to_lower(event.action) in (\"invokemodel\", \"invokemodelwithresponsestream\", \"converse\", \"conversestream\")) and not starts_with(to_lower(aws.cloudtrail.user_identity.arn), \"arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/\")\n| stats value_count=count_distinct(cloud.region) by aws.cloudtrail.user_identity.arn\n| where value_count >= 3"
   ],
   "sqlite": [
     "SELECT `userIdentity.arn`, COUNT(DISTINCT awsRegion) AS value_count FROM (SELECT * FROM logs WHERE (eventSource='bedrock.amazonaws.com' AND (eventName='InvokeModel' OR eventName='InvokeModelWithResponseStream' OR eventName='Converse' OR eventName='ConverseStream')) AND (NOT `userIdentity.arn` LIKE 'arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/%' ESCAPE '\\')) AS subquery GROUP BY `userIdentity.arn` HAVING value_count >= 3"

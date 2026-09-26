@@ -1,0 +1,23 @@
+# Splunk: log sources without a verified field mapping (Azure AzureActivity rows, LLM gateway logs
+# with OpenTelemetry GenAI attributes). Field names are passed through unchanged; only an index
+# restriction is added so the queries do not search every index.
+# Both index values are PLACEHOLDERS: replace them with the index that holds that data.
+name: splunk-placeholder-indexes
+priority: 20
+transformations:
+  - id: splunk_azure_activity_index
+    type: add_condition
+    conditions:
+      index: azure_activity
+    rule_conditions:
+      - type: logsource
+        product: azure
+        service: activitylogs
+  - id: splunk_llm_gateway_index
+    type: add_condition
+    conditions:
+      index: llm_gateway
+    rule_conditions:
+      - type: logsource
+        category: application
+        product: llm_gateway

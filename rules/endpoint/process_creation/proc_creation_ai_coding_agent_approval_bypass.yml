@@ -108,6 +108,8 @@ detection:
         or (selection_gemini_agent and selection_gemini_flag)
         or (selection_copilot_agent and selection_copilot_flag)
 falsepositives:
-    - Agents deliberately run unattended inside disposable, externally sandboxed environments (CI runners, dev containers, VMs). Add those hosts or users to the allowlist filter.
+    - >-
+      Agents deliberately run unattended inside disposable, externally sandboxed environments (CI runners, dev containers, VMs). Add those hosts or users to the
+      allowlist filter.
     - Developers who habitually run agents in bypass mode on their workstation. Treat this as a policy decision, not noise.
 level: medium

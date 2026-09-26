@@ -1,14 +1,23 @@
-title: AWS Bedrock Foundation Model Access Enabled
+title: AWS Bedrock Foundation Model Access Use Case Or Agreement Submitted
 id: 076edd05-1150-4548-bc15-ea9458a69662
 status: experimental
 description: |
-    Detects the CloudTrail calls made when access to an Amazon Bedrock foundation model is turned on:
-    submitting a model-access use case (PutUseCaseForModelAccess), accepting a Marketplace model
-    agreement (CreateFoundationModelAgreement) and granting the entitlement (PutFoundationModelEntitlement).
-    In LLMjacking intrusions, attackers holding stolen AWS credentials enable expensive models in an
-    account that never used them and then resell or consume the inference, leaving the victim with the bill.
-    Enabling model access is rare, usually done once per model by a platform team, and is a strong
-    precursor signal before any InvokeModel activity.
+    Detects CloudTrail calls that grant an account access to an Amazon Bedrock foundation model:
+    submitting the Anthropic first-time-use form (PutUseCaseForModelAccess) and accepting a
+    Marketplace model agreement (CreateFoundationModelAgreement). In LLMjacking intrusions, attackers
+    holding stolen AWS credentials unlock models in an account that never used them and then resell or
+    consume the inference, leaving the victim with the bill.
+    AWS simplified Bedrock model access on 15 Oct 2025: the Model Access page was retired, serverless
+    models are enabled by default, Marketplace subscriptions are created automatically on first
+    invocation, and the Anthropic first-time-use form is submitted once per account (or once at the
+    AWS Organizations level). After that change an attacker often does not need any of these calls, so
+    this rule is a precursor signal, not a complete LLMjacking detection. Pair it with the
+    multi-region invocation correlation (48136d7c-fcf0-43ce-ad6d-25c92fd7218f) and with IAM/SCP controls
+    on bedrock:InvokeModel. A PutUseCaseForModelAccess call in an account that already submitted one,
+    or from an unexpected principal, is still unusual and worth reviewing.
+    PutFoundationModelEntitlement is kept as a legacy selection for logs from before Oct 2025. The
+    repository's positive samples are Stratus Red Team events from Oct 2024 and include it. The
+    current public Bedrock API (botocore, checked 2026-09-25) no longer lists that operation.
     Log format assumption: raw CloudTrail JSON records (field names as delivered by CloudTrail).
     Allowlist hook: filters/aws_bedrock_model_access_enabled_allowlist.yml.
 references:
@@ -16,9 +25,10 @@ references:
     - https://permiso.io/blog/exploiting-hosted-models
     - https://sysdig.com/blog/llmjacking-stolen-cloud-credentials-used-in-new-ai-attack/
     - https://docs.aws.amazon.com/bedrock/latest/userguide/model-access.html
+    - https://aws.amazon.com/blogs/security/simplified-amazon-bedrock-model-access/
 author: Shubham Mane
 date: 2026-09-25
-modified: 2026-09-25
+modified: 2026-09-26
 tags:
     - attack.impact
     - attack.t1496.004
@@ -28,14 +38,22 @@ logsource:
     product: aws
     service: cloudtrail
 detection:
-    selection:
+    selection_source:
         eventSource: bedrock.amazonaws.com
+    selection_current:
         eventName:
             - PutUseCaseForModelAccess
             - CreateFoundationModelAgreement
-            - PutFoundationModelEntitlement
-    condition: selection
+    selection_legacy:
+        # Retired with the Oct 2025 simplified model access; kept for older logs.
+        eventName: PutFoundationModelEntitlement
+    condition: selection_source and (selection_current or selection_legacy)
 falsepositives:
-    - A platform or ML team enabling a new foundation model for a sanctioned project. Add the principals that are allowed to manage model access to the allowlist filter.
-    - Account bootstrap automation (for example Landing Zone or Terraform pipelines) that enables a standard set of models.
-level: high
+    - >-
+      A platform or ML team submitting the Anthropic first-time-use form or accepting a model agreement for a sanctioned project. Add the principals that are
+      allowed to manage model access to the allowlist filter.
+    - Account bootstrap automation (for example Landing Zone or Terraform pipelines) that submits the use case form for new accounts.
+    - >-
+      Since Oct 2025, Marketplace agreements can be created automatically when a model is first invoked. If these appear as CreateFoundationModelAgreement in
+      your trail, expect one event per newly used model.
+level: medium
