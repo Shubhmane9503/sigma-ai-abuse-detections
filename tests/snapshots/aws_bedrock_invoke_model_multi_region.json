@@ -1,6 +1,8 @@
 {
   "rule": "rules/cloud/aws/aws_bedrock_invoke_model_multi_region.yml",
-  "filter": "filters/aws_bedrock_invoke_model_multi_region_allowlist.yml",
+  "filters": [
+    "filters/aws_bedrock_invoke_model_multi_region_allowlist.yml"
+  ],
   "splunk": [
     "sourcetype=\"aws:cloudtrail\" eventSource=\"bedrock.amazonaws.com\" eventName IN (\"InvokeModel\", \"InvokeModelWithResponseStream\", \"Converse\", \"ConverseStream\") NOT userIdentity.arn=\"arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/*\"\n\n| sort 0 _time\n| streamstats time_window=1h dc(awsRegion) as value_count by userIdentity.arn\n\n| search value_count >= 3"
   ],

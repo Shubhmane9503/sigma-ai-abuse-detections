@@ -16,14 +16,13 @@ import json
 import sys
 from pathlib import Path
 
-from sigma.backends.sqlite import sqliteBackend
 from sigma.processing.pipeline import ProcessingPipeline
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
 
 from backends import CaseInsensitiveESQLBackend, SlidingWindowSplunkBackend  # noqa: E402
-from harness import PIPELINES_DIR, SNAPSHOT_DIR, RuleCase, ReplayBackend, rule_cases  # noqa: E402
+from harness import PIPELINES_DIR, SNAPSHOT_DIR, ReplayBackend, RuleCase, SqlReplayBackend, rule_cases  # noqa: E402
 
 QUERY_DIRS = {"splunk": ROOT / "queries" / "splunk", "esql": ROOT / "queries" / "esql"}
 QUERY_SUFFIX = {"splunk": ".spl", "esql": ".esql"}
@@ -41,7 +40,7 @@ def make_backends() -> dict:
         "splunk": SlidingWindowSplunkBackend(processing_pipeline=load_pipeline("splunk")),
         "esql": CaseInsensitiveESQLBackend(processing_pipeline=load_pipeline("esql")),
         "golang_expr": ReplayBackend(),
-        "sqlite": sqliteBackend(),
+        "sqlite": SqlReplayBackend(),
     }
 
 
@@ -60,7 +59,7 @@ def render_query_file(queries: list[str]) -> str:
 
 
 def render_snapshot(case: RuleCase, results: dict[str, list[str]]) -> str:
-    snapshot = {"rule": str(case.path.relative_to(ROOT)), "filter": str(case.filter_path.relative_to(ROOT)), **results}
+    snapshot = {"rule": str(case.path.relative_to(ROOT)), "filters": [str(p.relative_to(ROOT)) for p in case.filter_paths], **results}
     return json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n"
 
 

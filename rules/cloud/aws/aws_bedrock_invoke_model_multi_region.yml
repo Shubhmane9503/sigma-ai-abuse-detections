@@ -44,9 +44,10 @@ description: |
     applications are usually pinned to one or two regions (or use a cross-region inference profile
     called from a single home region).
     Correlation: value_count of awsRegion grouped by userIdentity.arn over a 1 hour timespan, threshold 3.
-    Note on backends: Splunk and ES|QL conversions use fixed 1 hour buckets (tumbling windows), so
-    activity straddling a bucket boundary can be missed. The repository's SQLite test harness checks a
-    sliding window explicitly (see docs/testing.md).
+    Scheduling: the committed Splunk query uses a sliding window (streamstats time_window=1h). The
+    committed ES|QL query has no time bucket: schedule it every 5-10 minutes with a 60-minute lookback,
+    so a burst that straddles an hour boundary (for example 03:50, 03:52, 04:10) is still counted
+    together. Both behaviours are covered by the tests (docs/testing.md).
     Allowlist hook: filters/aws_bedrock_invoke_model_multi_region_allowlist.yml (applied to the base rule).
 references:
     - https://stratus-red-team.cloud/attack-techniques/AWS/aws.impact.bedrock-invoke-model/
@@ -54,7 +55,7 @@ references:
     - https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html
 author: Shubham Mane
 date: 2026-09-25
-modified: 2026-09-25
+modified: 2026-09-26
 tags:
     - attack.initial-access
     - attack.t1078.004

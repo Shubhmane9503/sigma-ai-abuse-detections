@@ -2,6 +2,8 @@
 
 Raw CloudTrail JSON records.
 
+**Timing:** the Stratus events were recorded in Oct 2024, before AWS's 15 Oct 2025 "simplified model access" change. They show the old flow, including the since-retired `PutFoundationModelEntitlement` call, which the rule keeps as a legacy selection. After the change, a new attacker may not generate any of these events (see the rule description).
+
 | File | Origin |
 |---|---|
 | `positive.ndjson` | Lines 1-3: the `PutUseCaseForModelAccess`, `CreateFoundationModelAgreement` and `PutFoundationModelEntitlement` events from the Stratus Red Team detonation log for `aws.impact.bedrock-invoke-model` ([docs/detonation-logs/aws.impact.bedrock-invoke-model.json](https://github.com/DataDog/stratus-red-team/blob/17707ea98cbc9c77eb123dbcec49ad96acde72ca/docs/detonation-logs/aws.impact.bedrock-invoke-model.json), Apache-2.0). Line 4: derived from the Stratus `PutFoundationModelEntitlement` event, with the identity replaced by an IAM user holding a long-term access key (no `sessionContext`). This covers leaked-key LLMjacking and keeps the allowlist filter honest about absent fields. |

@@ -52,7 +52,14 @@ class RuleCase:
 
     @property
     def filter_path(self) -> Path:
+        """The rule's allowlist hook (every rule has one)."""
         return FILTERS_DIR / f"{self.stem}_allowlist.yml"
+
+    @property
+    def filter_paths(self) -> list[Path]:
+        """All filters for the rule: the allowlist plus optional extras such as <stem>_tokens.yml."""
+        extras = sorted(p for p in FILTERS_DIR.glob(f"{self.stem}_*.yml") if p != self.filter_path)
+        return [self.filter_path, *extras]
 
     @property
     def data_dir(self) -> Path:
@@ -64,7 +71,7 @@ class RuleCase:
     def collection(self, with_filter: bool = True) -> SigmaCollection:
         paths = [self.path]
         if with_filter:
-            paths.append(self.filter_path)
+            paths.extend(self.filter_paths)
         collection = SigmaCollection.load_ruleset(paths)
         collection.resolve_rule_references()
         return collection
@@ -78,7 +85,7 @@ class RuleCase:
         documents = [doc for doc in yaml.safe_load_all(self.path.read_text(encoding="utf-8")) if doc]
         documents = [doc for doc in documents if "correlation" not in doc]
         if with_filter:
-            documents.append(yaml.safe_load(self.filter_path.read_text(encoding="utf-8")))
+            documents.extend(yaml.safe_load(p.read_text(encoding="utf-8")) for p in self.filter_paths)
         collection = SigmaCollection.from_dicts(documents)
         collection.resolve_rule_references()
         return collection
@@ -138,6 +145,11 @@ class ReplayBackend(GolangExprBackend):
     Dotted names keep the backend's nested `a?.b` form.
     """
 
+    # Upstream emits `{field} in $env`, which is wrong for nested fields. `?.` access is
+    # nil-safe, so compare against nil instead.
+    field_exists_expression = "{field} != nil"
+    field_not_exists_expression = "{field} == nil"
+
     def escape_and_quote_field(self, field_name: str) -> str:
         if re.fullmatch(r"[A-Za-z_][\w.]*", field_name):
             return super().escape_and_quote_field(field_name)
@@ -195,8 +207,20 @@ def replay(case: RuleCase, kind: str, with_filter: bool = True) -> list[bool]:
 # Correlation: SQLite
 
 
+class SqlReplayBackend(sqliteBackend):
+    """SQLite backend with a NULL-correct `|exists`.
+
+    Upstream emits `field = field`, which is NULL (not false) for a missing field, so
+    `not (field|exists and ...)` still drops the event. `IS NOT NULL` is what ES|QL emits
+    (`is not null`) and gives the intended two-valued result.
+    """
+
+    field_exists_expression = "{field} IS NOT NULL"
+    field_not_exists_expression = "{field} IS NULL"
+
+
 def _sqlite_backend() -> sqliteBackend:
-    return sqliteBackend()
+    return SqlReplayBackend()
 
 
 def _load_table(events: list[dict]) -> sqlite3.Connection:
