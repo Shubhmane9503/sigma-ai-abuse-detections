@@ -5,3 +5,5 @@
 {"EventID":11,"UtcTime":"2026-09-22 10:04:30.000","ProcessId":4188,"Image":"/usr/bin/curl","TargetFilename":"/home/devuser/src/project/.mcp.json","User":"devuser"}
 {"EventID":11,"UtcTime":"2026-09-22 10:05:00.000","ProcessId":6644,"Image":"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe","TargetFilename":"C:\\Users\\devuser\\.codex\\config.toml","User":"EXAMPLE\\devuser"}
 {"EventID":11,"UtcTime":"2026-09-22 10:06:00.000","ProcessId":4200,"Image":"/usr/local/bin/node","TargetFilename":"/home/devuser/.gemini/settings.json","User":"devuser"}
+{"EventID":11,"UtcTime":"2026-09-22 10:07:00.000","ProcessId":4300,"Image":"/tmp/.cache/x/code","TargetFilename":"/home/devuser/.cursor/mcp.json","User":"devuser"}
+{"EventID":11,"UtcTime":"2026-09-22 10:08:00.000","ProcessId":4301,"Image":"/home/devuser/Downloads/claude","TargetFilename":"/home/devuser/.claude/settings.json","User":"devuser"}

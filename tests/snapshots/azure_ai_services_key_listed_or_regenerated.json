@@ -4,7 +4,7 @@
     "filters/azure_ai_services_key_listed_or_regenerated_allowlist.yml"
   ],
   "splunk": [
-    "OperationNameValue IN (\"Microsoft.CognitiveServices/accounts/listKeys/action\", \"Microsoft.CognitiveServices/accounts/regenerateKey/action\") ActivityStatusValue IN (\"Success\", \"Succeeded\") NOT (Caller IN (\"00000000-0000-0000-0000-00000000a110\", \"allowlisted-key-rotation@example.com\"))"
+    "index=\"azure_activity\" OperationNameValue IN (\"Microsoft.CognitiveServices/accounts/listKeys/action\", \"Microsoft.CognitiveServices/accounts/regenerateKey/action\") ActivityStatusValue IN (\"Success\", \"Succeeded\") NOT (Caller IN (\"00000000-0000-0000-0000-00000000a110\", \"allowlisted-key-rotation@example.com\"))"
   ],
   "esql": [
     "from * metadata _id, _index, _version | where (to_lower(OperationNameValue) in (\"microsoft.cognitiveservices/accounts/listkeys/action\", \"microsoft.cognitiveservices/accounts/regeneratekey/action\")) and (to_lower(ActivityStatusValue) in (\"success\", \"succeeded\")) and not (to_lower(Caller) in (\"00000000-0000-0000-0000-00000000a110\", \"allowlisted-key-rotation@example.com\"))"

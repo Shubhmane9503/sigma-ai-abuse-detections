@@ -5,7 +5,7 @@
     "filters/llm_gateway_system_prompt_canary_in_output_tokens.yml"
   ],
   "splunk": [
-    "gen_ai.output.messages=\"*SPCANARY-*\" NOT service.name=\"allowlisted-canary-selftest\" gen_ai.output.messages=\"*SPCANARY-7f3c9a1e5b2d*\" NOT (gen_ai.input.messages=* gen_ai.input.messages=\"*SPCANARY-7f3c9a1e5b2d*\")"
+    "index=\"llm_gateway\" gen_ai.output.messages=\"*SPCANARY-*\" NOT service.name=\"allowlisted-canary-selftest\" gen_ai.output.messages=\"*SPCANARY-7f3c9a1e5b2d*\" NOT (gen_ai.input.messages=* gen_ai.input.messages=\"*SPCANARY-7f3c9a1e5b2d*\")"
   ],
   "esql": [
     "from * metadata _id, _index, _version | where to_lower(gen_ai.output.messages) like \"*spcanary-*\" and not to_lower(service.name) == \"allowlisted-canary-selftest\" and to_lower(gen_ai.output.messages) like \"*spcanary-7f3c9a1e5b2d*\" and not (gen_ai.input.messages is not null and to_lower(gen_ai.input.messages) like \"*spcanary-7f3c9a1e5b2d*\")"

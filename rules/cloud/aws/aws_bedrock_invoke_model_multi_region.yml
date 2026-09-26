@@ -72,6 +72,8 @@ correlation:
         gte: 3
         field: awsRegion
 falsepositives:
-    - Global applications that deliberately call Bedrock in several regions from one role (for example a multi-region failover design). Add the role to the allowlist filter.
+    - >-
+      Global applications that deliberately call Bedrock in several regions from one role (for example a multi-region failover design). Add the role to the
+      allowlist filter.
     - Model evaluation or benchmarking jobs that iterate over regions.
 level: high

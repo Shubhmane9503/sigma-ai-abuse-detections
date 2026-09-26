@@ -49,7 +49,11 @@ detection:
         eventName: PutFoundationModelEntitlement
     condition: selection_source and (selection_current or selection_legacy)
 falsepositives:
-    - A platform or ML team submitting the Anthropic first-time-use form or accepting a model agreement for a sanctioned project. Add the principals that are allowed to manage model access to the allowlist filter.
+    - >-
+      A platform or ML team submitting the Anthropic first-time-use form or accepting a model agreement for a sanctioned project. Add the principals that are
+      allowed to manage model access to the allowlist filter.
     - Account bootstrap automation (for example Landing Zone or Terraform pipelines) that submits the use case form for new accounts.
-    - Since Oct 2025, Marketplace agreements can be created automatically when a model is first invoked. If these appear as CreateFoundationModelAgreement in your trail, expect one event per newly used model.
+    - >-
+      Since Oct 2025, Marketplace agreements can be created automatically when a model is first invoked. If these appear as CreateFoundationModelAgreement in
+      your trail, expect one event per newly used model.
 level: medium

@@ -48,6 +48,8 @@ detection:
             - Succeeded
     condition: selection
 falsepositives:
-    - Key rotation automation and deployment pipelines that read keys to configure applications. Add their service principal or managed identity to the allowlist filter.
+    - >-
+      Key rotation automation and deployment pipelines that read keys to configure applications. Add their service principal or managed identity to the
+      allowlist filter.
     - Administrators viewing keys in the Azure portal (the portal calls listKeys when the Keys and Endpoint blade is opened).
 level: medium

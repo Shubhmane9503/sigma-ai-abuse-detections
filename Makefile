@@ -11,10 +11,11 @@ JSON_MATCHER_REPO   := https://github.com/SigmaHQ/json_matcher
 JSON_MATCHER_COMMIT := 3bb3022bbe093cab0edf81d48ee4559548645d72
 JSON_MATCHER        := $(BIN)/json_matcher
 
-.PHONY: help setup check test test-esql convert snapshots mappings matrix scrub framework-data framework-check demo clean
+.PHONY: help setup lint check test test-esql convert snapshots mappings matrix scrub framework-data framework-check demo clean
 
 help:
 	@echo "make setup            create $(VENV), install pinned tools, build json_matcher"
+	@echo "make lint             yamllint over rules, filters, pipelines and workflows"
 	@echo "make check            sigma check over rules/ and filters/ (issues fail the build)"
 	@echo "make test             sigma check + full pytest suite"
 	@echo "make test-esql        run committed ES|QL queries on Elasticsearch (needs ESQL_TEST_URL)"
@@ -39,10 +40,13 @@ $(JSON_MATCHER): | $(PY)
 	git -C build/json_matcher checkout --quiet $(JSON_MATCHER_COMMIT)
 	cd build/json_matcher && GOTOOLCHAIN=auto go build -o $(abspath $(JSON_MATCHER)) .
 
+lint:
+	$(BIN)/yamllint --strict rules filters pipelines .github .yamllint
+
 check:
 	$(PY) scripts/sigma_check.py --fail-on-issues rules/ filters/
 
-test: check
+test: lint check
 	$(PY) -m pytest
 
 # Needs an Elasticsearch 9.x node, e.g.

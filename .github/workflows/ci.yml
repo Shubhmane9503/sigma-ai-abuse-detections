@@ -18,27 +18,30 @@ jobs:
     name: Rules and tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
           go-version: "1.26.x"
           cache: false
 
       - name: Cache json_matcher build
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
         with:
           path: .venv/bin/json_matcher
           key: json-matcher-${{ runner.os }}-${{ hashFiles('Makefile') }}
 
       - name: Set up toolchain
         run: make setup
+
+      - name: yamllint
+        run: make lint
 
       - name: sigma check (rules and filters, issues fail the build)
         run: make check
@@ -57,7 +60,7 @@ jobs:
 
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: pytest-report
           path: pytest-report.xml
@@ -78,8 +81,8 @@ jobs:
           --health-cmd "curl -fs http://localhost:9200/_cluster/health?wait_for_status=yellow"
           --health-interval 10s --health-timeout 5s --health-retries 30
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.11"
           cache: pip
@@ -94,8 +97,8 @@ jobs:
     name: Pinned ATT&CK / ATLAS extracts match upstream
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97  # v7.0.0
         with:
           python-version: "3.11"
       - run: pip install PyYAML==6.0.3
@@ -105,10 +108,10 @@ jobs:
     name: Secret scan
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           fetch-depth: 0
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
         with:
           go-version: "1.26.x"
           cache: false
