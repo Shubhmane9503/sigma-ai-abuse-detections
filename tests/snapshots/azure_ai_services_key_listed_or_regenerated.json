@@ -5,7 +5,7 @@
     "OperationNameValue IN (\"Microsoft.CognitiveServices/accounts/listKeys/action\", \"Microsoft.CognitiveServices/accounts/regenerateKey/action\") ActivityStatusValue=\"Success\" NOT (Caller IN (\"00000000-0000-0000-0000-00000000a110\", \"allowlisted-key-rotation@example.com\"))"
   ],
   "esql": [
-    "from * metadata _id, _index, _version | where (OperationNameValue in (\"Microsoft.CognitiveServices/accounts/listKeys/action\", \"Microsoft.CognitiveServices/accounts/regenerateKey/action\")) and ActivityStatusValue==\"Success\" and not (Caller in (\"00000000-0000-0000-0000-00000000a110\", \"allowlisted-key-rotation@example.com\"))"
+    "from * metadata _id, _index, _version | where (to_lower(OperationNameValue) in (\"microsoft.cognitiveservices/accounts/listkeys/action\", \"microsoft.cognitiveservices/accounts/regeneratekey/action\")) and to_lower(ActivityStatusValue) == \"success\" and not (to_lower(Caller) in (\"00000000-0000-0000-0000-00000000a110\", \"allowlisted-key-rotation@example.com\"))"
   ],
   "golang_expr": [
     "(lower(OperationNameValue) == lower(\"Microsoft.CognitiveServices/accounts/listKeys/action\") or lower(OperationNameValue) == lower(\"Microsoft.CognitiveServices/accounts/regenerateKey/action\")) and lower(ActivityStatusValue) == lower(\"Success\") and not (lower(Caller) == lower(\"00000000-0000-0000-0000-00000000a110\") or lower(Caller) == lower(\"allowlisted-key-rotation@example.com\"))"

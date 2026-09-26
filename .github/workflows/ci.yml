@@ -62,6 +62,34 @@ jobs:
           name: pytest-report
           path: pytest-report.xml
 
+  esql-execution:
+    name: ES|QL execution
+    runs-on: ubuntu-latest
+    services:
+      elasticsearch:
+        image: elasticsearch:9.1.5
+        env:
+          discovery.type: single-node
+          xpack.security.enabled: "false"
+          ES_JAVA_OPTS: -Xms1g -Xmx1g
+        ports:
+          - 9200:9200
+        options: >-
+          --health-cmd "curl -fs http://localhost:9200/_cluster/health?wait_for_status=yellow"
+          --health-interval 10s --health-timeout 5s --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - run: pip install -r requirements.txt
+      - name: Run committed ES|QL queries against the samples
+        env:
+          ESQL_TEST_URL: http://localhost:9200
+        run: python -m pytest tests/test_esql_execution.py -rxX
+
   framework-data:
     name: Pinned ATT&CK / ATLAS extracts match upstream
     runs-on: ubuntu-latest

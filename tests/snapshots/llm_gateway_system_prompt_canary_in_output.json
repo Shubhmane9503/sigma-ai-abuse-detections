@@ -5,7 +5,7 @@
     "gen_ai.output.messages=\"*SPCANARY-*\" NOT service.name=\"allowlisted-canary-selftest\""
   ],
   "esql": [
-    "from * metadata _id, _index, _version | where gen_ai.output.messages like \"*SPCANARY-*\" and not service.name==\"allowlisted-canary-selftest\""
+    "from * metadata _id, _index, _version | where to_lower(gen_ai.output.messages) like \"*spcanary-*\" and not to_lower(service.name) == \"allowlisted-canary-selftest\""
   ],
   "golang_expr": [
     "lower(gen_ai?.output?.messages) contains lower(\"SPCANARY-\") and not (lower(service?.name) == lower(\"allowlisted-canary-selftest\"))"

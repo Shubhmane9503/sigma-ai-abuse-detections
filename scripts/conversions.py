@@ -3,8 +3,9 @@
 Each rule is converted together with its allowlist filter, the same way
 `sigma convert --filter filters/<rule>_allowlist.yml` would:
 
-  splunk       Splunk SPL with the pipelines in pipelines/splunk/
-  esql         Elastic ES|QL with the pipelines in pipelines/esql/
+  splunk       Splunk SPL with the pipelines in pipelines/splunk/ (sliding correlation windows)
+  esql         Elastic ES|QL with the pipelines in pipelines/esql/ (case-insensitive, valid
+               LIKE escaping, no correlation time buckets; see scripts/backends.py)
   golang_expr  expression replayed by the tests (single-event rules only)
   sqlite       SQL used by the correlation tests
 """
@@ -15,14 +16,13 @@ import json
 import sys
 from pathlib import Path
 
-from sigma.backends.elasticsearch import ESQLBackend
-from sigma.backends.splunk import SplunkBackend
 from sigma.backends.sqlite import sqliteBackend
 from sigma.processing.pipeline import ProcessingPipeline
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
 
+from backends import CaseInsensitiveESQLBackend, SlidingWindowSplunkBackend  # noqa: E402
 from harness import PIPELINES_DIR, SNAPSHOT_DIR, RuleCase, ReplayBackend, rule_cases  # noqa: E402
 
 QUERY_DIRS = {"splunk": ROOT / "queries" / "splunk", "esql": ROOT / "queries" / "esql"}
@@ -36,10 +36,10 @@ def load_pipeline(target: str) -> ProcessingPipeline:
     return pipeline
 
 
-def backends() -> dict:
+def make_backends() -> dict:
     return {
-        "splunk": SplunkBackend(processing_pipeline=load_pipeline("splunk")),
-        "esql": ESQLBackend(processing_pipeline=load_pipeline("esql")),
+        "splunk": SlidingWindowSplunkBackend(processing_pipeline=load_pipeline("splunk")),
+        "esql": CaseInsensitiveESQLBackend(processing_pipeline=load_pipeline("esql")),
         "golang_expr": ReplayBackend(),
         "sqlite": sqliteBackend(),
     }
@@ -48,7 +48,7 @@ def backends() -> dict:
 def convert(case: RuleCase) -> dict[str, list[str]]:
     """Convert one rule (with its filter) to every target. Unsupported targets are omitted."""
     results = {}
-    for name, backend in backends().items():
+    for name, backend in make_backends().items():
         if name == "golang_expr" and case.is_correlation:
             continue  # golang_expr has no correlation support; the SQLite harness covers these rules
         results[name] = [str(query) for query in backend.convert(case.collection(with_filter=True))]
