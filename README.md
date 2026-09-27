@@ -4,7 +4,7 @@
 
 Detection-as-code Sigma rules for AI/LLM abuse (LLMjacking, AI key abuse, shadow AI, agent/MCP tampering), tested in CI against positive and negative logs.
 
-**Status: MVP built. All 8 rules, their samples, filters, pipelines, committed queries and the full test harness are in the repository, and `make test` passes.** Two items are still open: branch protection on `main` (a repository setting, not yet enabled) and baselines from a personal AWS/Azure sandbox. They are left unticked under [Milestones](#milestones).
+**Status: MVP built. All 8 rules, their samples, filters, pipelines, committed queries and the full test harness are in the repository, and `make test` passes.** `main` is protected: every change goes through a pull request that must pass the required checks "Rules and tests", "Secret scan" and "Pinned ATT&CK / ATLAS extracts match upstream", be up to date with `main`, and admins are included. One item is still open: baselines from a personal AWS/Azure sandbox, left unticked under [Milestones](#milestones).
 
 This README began as the build spec. It now describes what is built. Where the build differs from the original plan, the difference is stated in place.
 
@@ -69,12 +69,12 @@ This repository fills that gap with Sigma rules that are **tested in CI against 
 
 - **8 MVP Sigma rules** covering LLMjacking, AI key abuse, shadow AI, agent/MCP tampering and prompt leakage (see [Scope](#scope)).
 - **Positive, negative and allowlisted samples for every rule**, stored as NDJSON with a `SOURCE.md` recording where each file came from, replayed in CI by two engines (golang_expr/json_matcher and SQLite).
-- **CI on every pull request**: yamllint, `sigma check`, replay tests, correlation tests, conversion snapshots, ES|QL execution on Elasticsearch and mapping validation all run, and any failure turns the pull request red. The checks gate merges once they are made required by branch protection on `main`, which is not yet enabled.
-- **Committed backend queries** for **Splunk** and **Elastic ES|QL**, regenerated from the rules and checked for drift in CI. The ES|QL queries are executed on Elasticsearch 9.1.5 in CI. The Splunk queries are snapshot-tested only.
+- **CI on every pull request, enforced on `main`**: yamllint, `sigma check`, replay tests, correlation tests, conversion snapshots, ES|QL execution on Elasticsearch and mapping validation all run. Branch protection requires "Rules and tests", "Secret scan" and "Pinned ATT&CK / ATLAS extracts match upstream" to pass before a pull request can merge. The "ES|QL execution" job runs on every pull request but is not (yet) a required check.
+- **Committed backend queries** for **Splunk** and **Elastic ES|QL**, regenerated from the rules and checked for drift in CI. The ES|QL queries are executed on Elasticsearch 9.1.5 in CI against samples indexed with real ECS field types. The Splunk queries are snapshot-tested only. The ES|QL multi-region correlation query is **scheduled-detection only** (every 5–10 min with a 60-min lookback). Run ad hoc over more than an hour, it alerts on slow, legitimate multi-region use.
 - **ATT&CK and ATLAS mappings** on every rule, validated against pinned ATT&CK v19.2 and ATLAS 2026.09 data.
 - **Tuning support**: each rule has a false-positive note and an allowlist hook implemented with Sigma [filters](https://github.com/SigmaHQ/sigma-specification/blob/main/specification/sigma-filters-specification.md), so environments can tune without editing the rule.
 - **Custom processing pipelines** (`pipelines/splunk/`, `pipelines/esql/`) that map CloudTrail, proxy and endpoint fields for the chosen backends, since no installed pipeline covers them. The ES|QL pipelines fail conversion on any unmapped field. **The Azure (rule 3) and LLM-gateway (rule 8) rules have no field-mapping pipeline:** their Splunk and ES|QL queries use the raw AzureActivity / OpenTelemetry GenAI field names. The ES|QL queries search all indexes, and Splunk gets only a placeholder index. Map the fields before using them on data with other field names (see [docs/tuning.md](docs/tuning.md#backend-caveats)).
-- **Backend fixes** (`scripts/backends.py`): valid ES|QL `LIKE` escaping, case-insensitive ES|QL matching, and sliding correlation windows for Splunk and ES|QL. The upstream conversions got these wrong, as shown by running them on Elasticsearch.
+- **Backend fixes** (`scripts/backends.py`): valid ES|QL `LIKE` escaping, case-insensitive ES|QL matching (except on ECS `ip` fields, which compare with `to_ip()`), and sliding correlation windows for Splunk and ES|QL. The upstream conversions got these wrong, as shown by running them on Elasticsearch.
 - **A coverage matrix** (rule x ATT&CK x ATLAS x backend) generated from the rule files, not maintained by hand.
 
 ### User-facing commands
@@ -112,7 +112,7 @@ Requirements: Python 3.11+, Go 1.26+ (to build json_matcher), git and make.
 - `make convert` writes one Splunk query and one ES|QL query per rule into `queries/splunk/` and `queries/esql/`, named after the rule file.
 - `make mappings` prints each rule with its ATT&CK and ATLAS IDs and names, and exits non-zero if any ID is unknown, revoked or deprecated in the pinned data, or does not fit the rule's tactic tags.
 - `make matrix` produces [docs/coverage.md](docs/coverage.md): one row per rule with log source, ATT&CK technique, ATLAS technique, sample counts and links to the committed queries.
-- `make demo` renames a field in the Bedrock rule in a temporary copy and shows `test_positive_samples_match` failing on every positive event (output in [docs/testing.md](docs/testing.md#demo-the-suite-catches-a-broken-rule)). Such a pull request shows a red check. Once branch protection requires the CI checks, it cannot be merged.
+- `make demo` renames a field in the Bedrock rule in a temporary copy and shows `test_positive_samples_match` failing on every positive event (output in [docs/testing.md](docs/testing.md#demo-the-suite-catches-a-broken-rule)). Such a pull request fails the required "Rules and tests" check and cannot be merged.
 
 ---
 
@@ -202,7 +202,7 @@ rules/*.yml ──► sigma check ───────────────�
 | Backend: SQL tests | `pySigma-backend-sqlite` 1.2.4 | Converts correlation base rules, and single-event rules for the NULL-semantics cross-check. |
 | Replay engine | [json_matcher](https://github.com/SigmaHQ/json_matcher) v0.0.2 (MIT), commit `3bb3022` | Evaluates `golang_expr` over NDJSON. Built from source by `make setup`. |
 | Test runner | pytest 9.1.1 | Asserts replay, correlation, snapshot and mapping results. |
-| CI | GitHub Actions | Runs on every pull request. Not yet a required status check: branch protection on `main` is still to be enabled. |
+| CI | GitHub Actions | Runs on every pull request. Required status checks on `main`: "Rules and tests", "Secret scan" and "Pinned ATT&CK / ATLAS extracts match upstream". "ES\|QL execution" runs but is not required. |
 | ES\|QL execution | Elasticsearch 9.1.5 (`elasticsearch:9.1.5` service container) | Runs the committed ES\|QL queries against the samples. |
 | Lint | yamllint 1.38.0 | Rules, filters, pipelines and workflows. |
 
@@ -228,6 +228,7 @@ sigma-ai-abuse-detections/
 ├── .github/workflows/ci.yml   # lint, sigma check, tests, query drift, ES|QL execution, framework data, gitleaks
 ├── .github/dependabot.yml     # weekly updates for the SHA-pinned GitHub Actions
 ├── .yamllint
+├── .sigma-validation.yml      # sigma check validators and intentional per-rule exclusions
 ├── rules/
 │   ├── cloud/aws/             # Bedrock rules (single-event and correlation)
 │   ├── cloud/azure/           # Azure AI key rule
@@ -309,7 +310,7 @@ sigma-ai-abuse-detections/
 
 ## Testing strategy
 
-The core principle is **fail-closed CI: no rule ships without passing tests.** Every check below runs on every pull request in GitHub Actions, and a failing check marks the pull request red. Branch protection on `main` is **not yet enabled**. Once it requires the "Rules and tests", "ES|QL execution", "Secret scan" and "Pinned ATT&CK / ATLAS extracts match upstream" checks, a failing pull request cannot be merged.
+The core principle is **fail-closed CI: no rule ships without passing tests.** Every check below runs on every pull request in GitHub Actions. Branch protection on `main` (enabled 27 Sep 2026) requires a pull request, requires the checks "Rules and tests", "Secret scan" and "Pinned ATT&CK / ATLAS extracts match upstream" to pass, requires the branch to be up to date with `main`, applies to admins, and blocks force pushes. A pull request failing any of those checks cannot be merged. The "ES|QL execution" job also runs on every pull request, but it is not a required check, so its failure is visible without blocking the merge.
 
 ### 1. Syntax and schema: `sigma check`
 
@@ -384,7 +385,7 @@ What each negative sample should contain (guidance):
 
 ## Guardrails and security design
 
-- **No merge without tests (pending branch protection).** CI runs on every pull request, and rules without positive, negative and allowlisted samples fail the meta-test. Merges are gated only once branch protection on `main` requires the CI checks, which is not yet enabled.
+- **No merge without tests.** Branch protection on `main` requires a pull request with "Rules and tests", "Secret scan" and "Pinned ATT&CK / ATLAS extracts match upstream" passing and the branch up to date, including for admins, and blocks force pushes. Rules without positive, negative and allowlisted samples fail the meta-test inside "Rules and tests". "ES|QL execution" is not yet required.
 - **ATLAS mapping without breaking the spec.** ATLAS IDs live in a custom `atlas:` field, ATT&CK in `tags`, both validated against pinned data.
 - **Scrubbed samples.** All samples are scrubbed of AWS account IDs, Azure subscription and tenant IDs, access keys, tokens, real usernames, real hostnames and real IP addresses before commit. Replacements use consistent placeholders so correlation logic still works.
 - **No sensitive or organizational data.** Only public datasets, a personal sandbox and hand-crafted logs are used. No logs from any real organization are ever committed.
@@ -403,7 +404,7 @@ The MVP was planned as 3 weekends, each ending with a pull request that passes C
 
 - [x] Repository scaffolding, Makefile, pinned `requirements.txt`
 - [x] GitHub Actions CI workflow with `sigma check` and pytest
-- [ ] CI set as a required check on `main` (branch protection: repository setting)
+- [x] CI set as a required check on `main` (branch protection: repository setting)
 - [x] GitHub secret scanning and push protection enabled (repository setting)
 - [x] Secret scanner in CI (gitleaks); sample-scrub check in place
 - [x] Single-event replay harness (golang_expr + json_matcher), including the trailing-newline workaround
@@ -448,7 +449,7 @@ The MVP is done when all of the following are true and can be checked by a revie
 - [x] Splunk and ES|QL queries for every rule are committed in `queries/`, match fresh `make convert` output, and match snapshots.
 - [x] Every ATT&CK and ATLAS ID is validated against pinned ATT&CK v19.2 and ATLAS 2026.09 data.
 - [x] Every rule has a false-positive note and an allowlist filter.
-- [ ] CI is a required check on `main` and the badge on `main` is green. (The badge is green; branch protection is not yet enabled.)
+- [x] CI is a required check on `main` and the badge on `main` is green. (Required checks: "Rules and tests", "Secret scan" and "Pinned ATT&CK / ATLAS extracts match upstream".)
 - [x] `make test` and `make convert` work from a clean clone after `make setup`.
 - [x] Secret scanning is enabled; no keys, account IDs or real organizational data are present in the repository history. (GitHub secret scanning and push protection are on; gitleaks and the scrub check pass on the full history.)
 - [x] NOTICE credits all third-party samples; LICENSE (MIT) and LICENSE-RULES (DRL 1.1) are present.

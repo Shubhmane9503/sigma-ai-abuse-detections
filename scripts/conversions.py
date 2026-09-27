@@ -25,6 +25,21 @@ from backends import CaseInsensitiveESQLBackend, SlidingWindowSplunkBackend  # n
 from harness import PIPELINES_DIR, SNAPSHOT_DIR, ReplayBackend, RuleCase, SqlReplayBackend, rule_cases  # noqa: E402
 
 QUERY_DIRS = {"splunk": ROOT / "queries" / "splunk", "esql": ROOT / "queries" / "esql"}
+
+# Notes written as comments at the top of the committed query files (not into snapshots).
+# ES|QL takes // line comments; Splunk takes ```...``` comments (Splunk 8.1+).
+QUERY_NOTES = {
+    "llm_gateway_system_prompt_canary_in_output": [
+        "The canary token SPCANARY-7f3c9a1e5b2d below is a test placeholder from",
+        "filters/llm_gateway_system_prompt_canary_in_output_tokens.yml. Put your own tokens in that",
+        "(private) filter and regenerate this query (make convert) before using it.",
+    ],
+    "aws_bedrock_invoke_model_multi_region": [
+        "Scheduled-detection only: run every 5-10 minutes with a 60-minute lookback.",
+        "Not for ad-hoc searches over ranges longer than 1 hour: the query has no time window of",
+        "its own and would count regions across the whole range.",
+    ],
+}
 QUERY_SUFFIX = {"splunk": ".spl", "esql": ".esql"}
 
 
@@ -54,8 +69,15 @@ def convert(case: RuleCase) -> dict[str, list[str]]:
     return results
 
 
-def render_query_file(queries: list[str]) -> str:
-    return "\n\n".join(query.strip() for query in queries) + "\n"
+def render_query_file(queries: list[str], target: str = "", notes: list[str] | None = None) -> str:
+    body = "\n\n".join(query.strip() for query in queries) + "\n"
+    if not notes:
+        return body
+    if target == "esql":
+        header = "".join(f"// {line}\n" for line in notes)
+    else:
+        header = "".join(f"```{line}```\n" for line in notes)
+    return header + body
 
 
 def render_snapshot(case: RuleCase, results: dict[str, list[str]]) -> str:
@@ -69,7 +91,9 @@ def expected_files() -> dict[Path, str]:
     for case in rule_cases():
         results = convert(case)
         for target, directory in QUERY_DIRS.items():
-            files[directory / f"{case.stem}{QUERY_SUFFIX[target]}"] = render_query_file(results[target])
+            files[directory / f"{case.stem}{QUERY_SUFFIX[target]}"] = render_query_file(
+                results[target], target, QUERY_NOTES.get(case.stem)
+            )
         files[SNAPSHOT_DIR / f"{case.stem}.json"] = render_snapshot(case, results)
     return files
 

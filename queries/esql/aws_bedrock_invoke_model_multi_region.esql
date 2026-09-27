@@ -1,3 +1,6 @@
+// Scheduled-detection only: run every 5-10 minutes with a 60-minute lookback.
+// Not for ad-hoc searches over ranges longer than 1 hour: the query has no time window of
+// its own and would count regions across the whole range.
 from logs-aws.cloudtrail-* metadata _id, _index, _version | where to_lower(event.provider) == "bedrock.amazonaws.com" and (to_lower(event.action) in ("invokemodel", "invokemodelwithresponsestream", "converse", "conversestream")) and not starts_with(to_lower(aws.cloudtrail.user_identity.arn), "arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/")
 | stats value_count=count_distinct(cloud.region) by aws.cloudtrail.user_identity.arn
 | where value_count >= 3

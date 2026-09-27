@@ -1,0 +1,10 @@
+# pySigma validation config used by `make check` (scripts/sigma_check.py).
+validators:
+  - all
+  # Downloads D3FEND data on every run; no rule carries D3FEND tags.
+  - -d3_fendtag
+exclusions:
+  # AI coding agent child process credential access: the literal tab after SSH key names is an
+  # intentional separator (cat ~/.ssh/id_ecdsa<TAB>| nc ...), not a mistyped "\t".
+  30d72208-8b1b-4e1a-9ed5-f0efddcecba1:
+    - control_character

@@ -47,7 +47,10 @@ description: |
     Scheduling: the committed Splunk query uses a sliding window (streamstats time_window=1h). The
     committed ES|QL query has no time bucket: schedule it every 5-10 minutes with a 60-minute lookback,
     so a burst that straddles an hour boundary (for example 03:50, 03:52, 04:10) is still counted
-    together. Both behaviours are covered by the tests (docs/testing.md).
+    together. The ES|QL query is for scheduled detection only: run ad hoc over a range longer than
+    one hour it counts regions across the whole range and alerts on slow, legitimate multi-region use
+    (such as the repository's batch-eval window-negative). Both behaviours are covered by the tests
+    (docs/testing.md).
     Allowlist hook: filters/aws_bedrock_invoke_model_multi_region_allowlist.yml (applied to the base rule).
 references:
     - https://stratus-red-team.cloud/attack-techniques/AWS/aws.impact.bedrock-invoke-model/
@@ -55,7 +58,7 @@ references:
     - https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html
 author: Shubham Mane
 date: 2026-09-25
-modified: 2026-09-26
+modified: 2026-09-27
 tags:
     - attack.initial-access
     - attack.t1078.004

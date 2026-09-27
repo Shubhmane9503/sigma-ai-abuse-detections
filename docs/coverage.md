@@ -6,8 +6,11 @@ Mappings are validated against pinned MITRE ATT&CK v19.2 and MITRE ATLAS 2026.09
 Sample counts are events in `tests/data/<rule>/`. Backend cells link to the committed query:
 
 - **ES|QL: tested** means the committed query runs on Elasticsearch 9.1.5 in CI (`tests/test_esql_execution.py`)
-  and matches every positive and no negative or allowlisted sample. **known gap** means a documented
-  exception listed in `tests/esql_known_gaps.yml`.
+  and matches every positive and no negative or allowlisted sample. The samples are indexed with the
+  ECS field types of ECS v9.5.0 (`ip` for `*.ip`, `wildcard` for command lines and URLs, `keyword`
+  otherwise), so a query that only works on all-keyword test data fails. Rules without an ES|QL
+  pipeline (Azure activity, LLM gateway) are tested with their raw field names as keyword.
+  **known gap** means a documented exception listed in `tests/esql_known_gaps.yml`.
 - **Splunk: snapshot only** means the query is generated and snapshot-tested, but not executed on Splunk.
 
 | Rule | Level | Log source | ATT&CK | ATLAS | Samples (pos / neg / allow) | Splunk | ES\|QL |
@@ -18,5 +21,5 @@ Sample counts are events in `tests/data/<rule>/`. Backend cells link to the comm
 | [Azure AI Services Account Keys Listed Or Regenerated](../rules/cloud/azure/azure_ai_services_key_listed_or_regenerated.yml) | medium | azure / activitylogs | T1552 Unsecured Credentials | AML.T0055 Unsecured Credentials | 3 / 5 / 2 | [snapshot only](../queries/splunk/azure_ai_services_key_listed_or_regenerated.spl) | [tested](../queries/esql/azure_ai_services_key_listed_or_regenerated.esql) |
 | [AI Agent Or MCP Configuration Modified By Non-Agent Process](../rules/endpoint/file_event/file_event_ai_agent_config_modified_by_foreign_process.yml) | medium | file_event | tactic: persistence | AML.T0081 Modify AI Agent Configuration | 9 / 10 / 1 | [snapshot only](../queries/splunk/file_event_ai_agent_config_modified_by_foreign_process.spl) | [tested](../queries/esql/file_event_ai_agent_config_modified_by_foreign_process.esql) |
 | [AI Coding Agent Started With Approval Or Sandbox Bypass](../rules/endpoint/process_creation/proc_creation_ai_coding_agent_approval_bypass.yml) | medium | process_creation | T1685 Disable or Modify Tools | AML.T0112.000 Local AI Agent | 14 / 11 / 1 | [snapshot only](../queries/splunk/proc_creation_ai_coding_agent_approval_bypass.spl) | [tested](../queries/esql/proc_creation_ai_coding_agent_approval_bypass.esql) |
-| [AI Coding Agent Child Process Command Line References Credential Files](../rules/endpoint/process_creation/proc_creation_ai_coding_agent_credential_file_access.yml) | high | process_creation | T1552.001 Credentials In Files | AML.T0098 AI Agent Tool Credential Harvesting | 7 / 7 / 1 | [snapshot only](../queries/splunk/proc_creation_ai_coding_agent_credential_file_access.spl) | [tested](../queries/esql/proc_creation_ai_coding_agent_credential_file_access.esql) |
+| [AI Coding Agent Child Process Command Line References Credential Files](../rules/endpoint/process_creation/proc_creation_ai_coding_agent_credential_file_access.yml) | high | process_creation | T1552.001 Credentials In Files | AML.T0098 AI Agent Tool Credential Harvesting | 11 / 7 / 1 | [snapshot only](../queries/splunk/proc_creation_ai_coding_agent_credential_file_access.spl) | [tested](../queries/esql/proc_creation_ai_coding_agent_credential_file_access.esql) |
 | [LLM API Request From Unapproved Client](../rules/proxy/proxy_llm_api_unapproved_client.yml) | low | proxy | T1102 Web Service<br>T1567 Exfiltration Over Web Service | AML.T0096 AI Service API | 10 / 10 / 2 | [snapshot only](../queries/splunk/proxy_llm_api_unapproved_client.spl) | [tested](../queries/esql/proxy_llm_api_unapproved_client.esql) |

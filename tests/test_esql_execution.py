@@ -19,10 +19,10 @@ from datetime import timedelta
 
 import pytest
 
-from esql_harness import correlation_alert_groups, es_url, known_gaps, matched_lines
+from esql_harness import ECS_FIELD_TYPES, correlation_alert_groups, es_url, known_gaps, matched_lines, pipeline_output_fields
 from harness import SAMPLE_KINDS, flatten, load_events, rule_cases
 
-pytestmark = pytest.mark.skipif(not es_url(), reason="ESQL_TEST_URL not set (see module docstring)")
+needs_es = pytest.mark.skipif(not es_url(), reason="ESQL_TEST_URL not set (see module docstring)")
 
 GAPS = known_gaps()
 
@@ -42,6 +42,13 @@ def _correlation_spec(case):
     return timedelta(seconds=correlation.timespan.seconds), list(correlation.group_by)
 
 
+def test_every_pipeline_field_has_an_ecs_type():
+    """Runs without Elasticsearch: new pipeline fields must be typed before they are tested."""
+    untyped = sorted(pipeline_output_fields() - set(ECS_FIELD_TYPES))
+    assert not untyped, f"add the ECS type of these fields to ECS_FIELD_TYPES in tests/esql_harness.py: {untyped}"
+
+
+@needs_es
 @pytest.mark.parametrize("case,kind", list(_params()))
 def test_committed_esql_query(case, kind):
     if case.is_correlation:

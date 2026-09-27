@@ -22,7 +22,7 @@ Every filter ships with an obviously fake placeholder value (documentation accou
 | MCP/agent config modified | `Image` (suffix) | Dotfile manager, configuration management agent, internal provisioning tool, agents installed in unlisted locations | Prefer full paths over file names. See the notes below. |
 | Agent bypass flags | `User` (suffix) | CI runner or dev-container accounts that run agents unattended in disposable sandboxes | Do not allowlist developers' own accounts. Bypass mode on a workstation is a policy question. |
 | Agent-spawned credential access | `User` (suffix) | Infrastructure automation accounts whose agents manage kubeconfig or cloud config | Consider tuning on the parent agent and command line instead of the whole account. |
-| System-prompt canary | `service.name` (allowlist) plus the token list in `…_tokens.yml` | Scheduled canary self-test service; your deployment's secret canary tokens | Keep the token filter private. See the canary notes below. |
+| System-prompt canary | `service.name` (allowlist) plus the token list in `…_tokens.yml` | Scheduled canary self-test service; your deployment's secret canary tokens | Keep the token filter private. The committed canary queries contain the test placeholder token `SPCANARY-7f3c9a1e5b2d`: regenerate them (`make convert`) after replacing the token filter. See the canary notes below. |
 
 ## Allowlist fields must always be present
 
@@ -37,8 +37,8 @@ The test suite checks this: `test_sqlite_engine_agrees_with_golang_expr` replays
 
 ## Backend caveats
 
-- **ES|QL case sensitivity is handled.** ES|QL `==`, `in`, `like`, `starts_with` and `ends_with` are case-sensitive, while Sigma is not. The committed ES|QL queries compare `to_lower(field)` against lower-cased values (`scripts/backends.py`), so upper-case AzureActivity operation names and lower-cased canary tokens match. `to_lower()` on every comparison stops Elasticsearch from using the keyword index directly. That is fine for scheduled detections over a short lookback, but expect slower ad-hoc searches over long ranges.
-- **Correlation scheduling.** The Splunk query for the multi-region rule uses `streamstats time_window=1h`, a sliding window. The ES|QL query has no time bucket. Schedule it every 5-10 minutes with a 60-minute lookback so that bursts straddling an hour boundary are counted together (see [testing.md](testing.md#correlation-rules-sqlite-with-an-explicit-window)).
+- **ES|QL case sensitivity is handled.** ES|QL `==`, `in`, `like`, `starts_with` and `ends_with` are case-sensitive, while Sigma is not. The committed ES|QL queries compare `to_lower(field)` against lower-cased values (`scripts/backends.py`), so upper-case AzureActivity operation names and lower-cased canary tokens match. ECS `ip` fields are the exception: they compare with `to_ip()` because `to_lower()` on an `ip` field rejects the whole query. Allowlist IP ranges with Sigma's `|cidr` modifier (emitted as `cidr_match()`), not wildcards. `to_lower()` on every comparison stops Elasticsearch from using the keyword index directly. That is fine for scheduled detections over a short lookback, but expect slower ad-hoc searches over long ranges.
+- **Correlation scheduling.** The Splunk query for the multi-region rule uses `streamstats time_window=1h`, a sliding window. The ES|QL query has no time bucket. Schedule it every 5-10 minutes with a 60-minute lookback so that bursts straddling an hour boundary are counted together. Do not run it ad hoc over ranges longer than an hour: without the lookback it counts regions across the whole range and alerts on slow, legitimate multi-region use (see [testing.md](testing.md#correlation-rules-sqlite-with-an-explicit-window)).
 - **Field names and data sources assumed by `pipelines/`:**
 
 | Log source | Splunk (`pipelines/splunk/`) | ES\|QL (`pipelines/esql/`) |
