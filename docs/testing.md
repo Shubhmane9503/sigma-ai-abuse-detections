@@ -1,6 +1,6 @@
 # How the test harness works
 
-CI (`.github/workflows/ci.yml`) runs the checks below on every pull request and on `main`, and `make test` runs the same checks locally (except the ES|QL execution job, `make test-esql`). A failing check marks the pull request red. It blocks the merge only once branch protection on `main` requires these checks.
+CI (`.github/workflows/ci.yml`) runs the checks below on every pull request and on `main`, and `make test` runs the same checks locally (except the ES|QL execution job, `make test-esql`). Branch protection on `main` requires "Rules and tests", "Secret scan" and "Pinned ATT&CK / ATLAS extracts match upstream" to pass (branch up to date, admins included). "ES|QL execution" runs on every pull request but is not a required check.
 
 What each layer proves:
 
@@ -91,7 +91,7 @@ Supporting tests:
 `scripts/conversions.py` converts every rule with its filters to Splunk SPL (`pipelines/splunk/`), ES|QL (`pipelines/esql/`), golang_expr and SQLite. The Splunk and ES|QL backends are subclassed in `scripts/backends.py` (unit tests: `tests/test_backends.py`):
 
 - **ES|QL `LIKE` escaping.** pySigma-backend-elasticsearch 2.1.1 emits `like "*\\claude\\versions\\*"`, which Elasticsearch rejects ("escape character is not followed by special wildcard char"). This broke 3 of the 8 shipped queries. Backslashes are doubled inside `LIKE` patterns only. The draft upstream report is in [upstream-issue-esql-like-escaping.md](upstream-issue-esql-like-escaping.md).
-- **ES|QL case sensitivity.** Every string comparison becomes `to_lower(field) <op> "<lower-cased value>"`, restoring Sigma's case-insensitive matching.
+- **ES|QL case sensitivity.** Every string comparison becomes `to_lower(field) <op> "<lower-cased value>"`, restoring Sigma's case-insensitive matching. The exception is ECS `ip` fields (`source.ip`, `destination.ip`, any `*.ip`), where `to_lower()` is a verification error that rejects the whole query. They compare with `field == to_ip("…")` or `field in (to_ip(…), …)`, and `|cidr` becomes `cidr_match()`. Wildcards on an ip field fail conversion. `test_no_committed_esql_query_lowercases_an_ip_field` scans every committed ES|QL query for this mistake.
 - **Correlation windows**, as described above.
 
 - `tests/snapshots/<rule>.json` holds all four outputs. `test_snapshots.py` compares a fresh conversion against them, so a backend upgrade, pipeline edit or rule change that alters any query shows up as a failing test and a reviewable diff.
@@ -103,7 +103,7 @@ Supporting tests:
 
 `tests/test_esql_execution.py` runs when `ESQL_TEST_URL` points at an Elasticsearch 9.x node (the CI job "ES|QL execution" uses an `elasticsearch:9.1.5` service container; locally see `make test-esql`). For every rule and sample kind it:
 
-1. translates the samples to the shape the ES|QL pipelines expect, using the `field_name_mapping` and `add_condition` entries of `pipelines/esql/*.yml` themselves (for example `event.type: start` for process events). `@timestamp` comes from `eventTime`, `TimeGenerated`, `UtcTime` or `timestamp`, and all strings are mapped as `keyword`. Log sources without an ES|QL pipeline keep their raw field names, which is what their queries use;
+1. translates the samples to the shape the ES|QL pipelines expect, using the `field_name_mapping` and `add_condition` entries of `pipelines/esql/*.yml` themselves (for example `event.type: start` for process events). `@timestamp` comes from `eventTime`, `TimeGenerated`, `UtcTime` or `timestamp`. Every field the pipelines emit is mapped with its real ECS type (`ECS_FIELD_TYPES` in `tests/esql_harness.py`, taken from ECS v9.5.0): `ip` for `source.ip` and `destination.ip`, `wildcard` for `process.command_line`, `process.parent.command_line`, `url.original` and `url.path`, `long` for `http.response.status_code`, and `keyword` for the rest. Other strings default to `keyword`. `test_every_pipeline_field_has_an_ecs_type` fails if a pipeline starts emitting an untyped field. Log sources without an ES|QL pipeline keep their raw field names, which is what their queries use. Typing matters: until 27 Sep 2026 every string was indexed as keyword, so the proxy query's `to_lower(source.ip)` passed here but was rejected on real ECS data;
 2. indexes them into a per-rule, per-kind index;
 3. runs the committed `queries/esql/<rule>.esql` with its `from` clause pointed at that index;
 4. asserts that every positive matches and no negative or allowlisted event does. Correlation queries must alert on every positive group.
@@ -129,7 +129,7 @@ FAILED tests/test_replay.py::test_positive_samples_match[aws_bedrock_model_acces
 FAILED tests/test_replay.py::test_allowlisted_samples_match_without_filter[aws_bedrock_model_access_enabled]
 2 failed, 5 passed, 42 deselected
 
-As expected, the tests failed: a pull request with this change would show a failing CI check.
+As expected, the tests failed: a pull request with this change would fail the required "Rules and tests" check and could not be merged.
 ```
 
 The failure lists every positive event that no longer matches. Other mutations checked while building the harness: removing the `ActivityStatusValue: Success` condition from the Azure rule (negative test fails), a null-unsafe `cs-username` allowlist (engine agreement test fails), widening the correlation timespan (negative test fails), and pointing a filter at the wrong rule (meta, replay and snapshot tests fail).

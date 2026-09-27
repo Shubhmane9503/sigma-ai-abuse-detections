@@ -25,9 +25,9 @@ def main() -> None:
 
     from sigma.cli.main import main as sigma_main
 
-    # The D3FEND tag validator downloads D3FEND data on every run. No rule here carries
-    # D3FEND tags, so it is excluded rather than left as an unpinned network dependency.
-    sys.argv = ["sigma", "check", "--exclude", "d3_fendtag", *sys.argv[1:]]
+    # .sigma-validation.yml selects the validators: all except d3_fendtag (it downloads D3FEND data
+    # on every run and no rule carries D3FEND tags), plus intentional per-rule exclusions.
+    sys.argv = ["sigma", "check", "-c", str(ROOT / ".sigma-validation.yml"), *sys.argv[1:]]
     sigma_main()
 
 

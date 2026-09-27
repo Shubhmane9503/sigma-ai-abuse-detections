@@ -11,7 +11,11 @@ queries. All three were found by running the committed queries on Elasticsearch 
    must be `\\\\` in the pattern, i.e. `\\\\\\\\` in the string literal.
 2. Case sensitivity. Sigma matches strings case-insensitively. ES|QL `==`, `in`,
    `like`, `starts_with` and `ends_with` are case-sensitive. Every string comparison
-   is emitted as `to_lower(field) <op> "<lower-cased value>"`.
+   is emitted as `to_lower(field) <op> "<lower-cased value>"`, except on fields that
+   ECS types as `ip` (source.ip, destination.ip, ... any *.ip): to_lower() on an ip field
+   is a verification error that rejects the whole query, so those compare with
+   `field == to_ip("<value>")` / `field in (to_ip(...), ...)`. Use Sigma's |cidr for
+   ranges (emitted as cidr_match()).
 3. Correlation windows. `date_trunc(1 hours, @timestamp)` buckets are tumbling windows
    that miss bursts straddling an hour boundary. The bucket is dropped: schedule the
    query every 5-10 minutes with a lookback equal to the rule's timespan.
@@ -29,7 +33,15 @@ from typing import ClassVar
 from sigma.backends.elasticsearch import ESQLBackend
 from sigma.backends.splunk import SplunkBackend
 from sigma.conversion.state import ConversionState
+from sigma.exceptions import SigmaFeatureNotSupportedByBackendError
 from sigma.types import SigmaString
+
+# ECS fields of type `ip` (ECS v9.5.0). Any other field ending in ".ip" is treated the same way.
+ECS_IP_FIELDS = frozenset({"source.ip", "destination.ip", "client.ip", "server.ip", "host.ip"})
+
+
+def is_ip_field(field: str) -> bool:
+    return field in ECS_IP_FIELDS or field.endswith(".ip")
 
 # A double-quoted ES|QL string literal following LIKE.
 _LIKE_LITERAL = re.compile(r'(\blike\s+)"((?:[^"\\]|\\.)*)"')
@@ -68,9 +80,28 @@ class CaseInsensitiveESQLBackend(ESQLBackend):
     def convert_value_str(self, s: SigmaString, state: ConversionState) -> str:
         return super().convert_value_str(s, state).lower()
 
+    def _ip_literal(self, cond, state: ConversionState) -> str:
+        value = cond.value
+        if value.contains_special():
+            raise SigmaFeatureNotSupportedByBackendError(
+                f"wildcards on ip-typed field {cond.field} are not supported in ES|QL; use the |cidr modifier"
+            )
+        # Plain (not lower-cased) string literal: IPv6 hex digits are case-insensitive for to_ip anyway.
+        return f"to_ip({ESQLBackend.convert_value_str(self, value, state)})"
+
     def convert_condition_field_eq_val_str(self, cond, state):
+        if is_ip_field(cond.field):
+            return f"{self.escape_and_quote_field(cond.field)} == {self._ip_literal(cond, state)}"
         result = super().convert_condition_field_eq_val_str(cond, state)
         return escape_like_backslashes(result) if isinstance(result, str) else result
+
+    def convert_condition_as_in_expression(self, cond, state):
+        field = cond.args[0].field
+        if is_ip_field(field) and all(arg.field == field for arg in cond.args):
+            values = ", ".join(self._ip_literal(arg, state) for arg in cond.args)
+            op = self.or_in_operator if type(cond).__name__ == "ConditionOR" else self.and_in_operator
+            return f"{self.escape_and_quote_field(field)} {op} ({values})"
+        return super().convert_condition_as_in_expression(cond, state)
 
 
 class SlidingWindowSplunkBackend(SplunkBackend):

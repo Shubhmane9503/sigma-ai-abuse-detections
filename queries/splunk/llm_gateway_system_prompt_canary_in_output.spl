@@ -1,1 +1,4 @@
+```The canary token SPCANARY-7f3c9a1e5b2d below is a test placeholder from```
+```filters/llm_gateway_system_prompt_canary_in_output_tokens.yml. Put your own tokens in that```
+```(private) filter and regenerate this query (make convert) before using it.```
 index="llm_gateway" gen_ai.output.messages="*SPCANARY-*" NOT service.name="allowlisted-canary-selftest" gen_ai.output.messages="*SPCANARY-7f3c9a1e5b2d*" NOT (gen_ai.input.messages=* gen_ai.input.messages="*SPCANARY-7f3c9a1e5b2d*")

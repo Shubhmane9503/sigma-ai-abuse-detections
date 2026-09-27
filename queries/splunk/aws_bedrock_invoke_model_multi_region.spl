@@ -1,3 +1,6 @@
+```Scheduled-detection only: run every 5-10 minutes with a 60-minute lookback.```
+```Not for ad-hoc searches over ranges longer than 1 hour: the query has no time window of```
+```its own and would count regions across the whole range.```
 sourcetype="aws:cloudtrail" eventSource="bedrock.amazonaws.com" eventName IN ("InvokeModel", "InvokeModelWithResponseStream", "Converse", "ConverseStream") NOT userIdentity.arn="arn:aws:sts::111122223333:assumed-role/allowlisted-multi-region-inference/*"
 
 | sort 0 _time

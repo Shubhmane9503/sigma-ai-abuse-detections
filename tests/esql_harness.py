@@ -6,8 +6,11 @@ themselves, so the translation cannot drift from the pipelines. Log sources with
 ES|QL pipeline (Azure activity, LLM gateway) are indexed with their raw field names, which
 is what their queries use.
 
-Each rule and sample kind gets its own index. All strings are mapped as keyword, and
-@timestamp is derived from the log source's timestamp field.
+Each rule and sample kind gets its own index. Fields the ES|QL pipelines emit are mapped with
+their real ECS types (ECS_FIELD_TYPES: `ip` for *.ip, `wildcard` for command lines and URLs),
+because a query can be valid on keyword test data and still be rejected on real ECS data
+(for example to_lower() on an ip field). Other strings are keyword. @timestamp is derived
+from the log source's timestamp field.
 """
 
 from __future__ import annotations
@@ -27,6 +30,41 @@ from harness import PIPELINES_DIR, ROOT, RuleCase, flatten, load_events
 QUERY_DIR = ROOT / "queries" / "esql"
 KNOWN_GAPS_FILE = ROOT / "tests" / "esql_known_gaps.yml"
 INDEX_PREFIX = "sigma-esql-test"
+
+# Types of every field the ES|QL pipelines emit, from ECS v9.5.0
+# (github.com/elastic/ecs, generated/ecs/ecs_flat.yml at tag v9.5.0). aws.cloudtrail.* fields
+# come from Elastic's AWS integration and are keyword there. tests/test_esql_execution.py
+# fails if a pipeline starts emitting a field that is not listed here.
+ECS_FIELD_TYPES = {
+    # CloudTrail (pipelines/esql/cloudtrail.yml)
+    "event.provider": "keyword",
+    "event.action": "keyword",
+    "cloud.region": "keyword",
+    "source.address": "keyword",
+    "user_agent.original": "keyword",
+    "aws.cloudtrail.error_code": "keyword",
+    "aws.cloudtrail.user_identity.arn": "keyword",
+    "aws.cloudtrail.user_identity.type": "keyword",
+    "aws.cloudtrail.user_identity.access_key_id": "keyword",
+    "aws.cloudtrail.user_identity.session_context.session_issuer.arn": "keyword",
+    # Proxy (pipelines/esql/proxy.yml)
+    "url.domain": "keyword",
+    "url.original": "wildcard",
+    "url.path": "wildcard",
+    "http.request.method": "keyword",
+    "http.response.status_code": "long",
+    "source.ip": "ip",
+    "destination.ip": "ip",
+    "user.name": "keyword",
+    # Endpoint (pipelines/esql/endpoint.yml)
+    "event.type": "keyword",
+    "process.executable": "keyword",
+    "process.command_line": "wildcard",
+    "process.working_directory": "keyword",
+    "process.parent.executable": "keyword",
+    "process.parent.command_line": "wildcard",
+    "file.path": "keyword",
+}
 
 # Timestamp source per sample field, in order of preference.
 TIMESTAMP_FIELDS = ("eventTime", "TimeGenerated", "timestamp", "UtcTime")
@@ -54,6 +92,18 @@ def _applies(item: dict, logsource) -> bool:
         return True
     matches = [_logsource_matches(c, logsource) for c in conditions]
     return any(matches) if item.get("rule_cond_op") == "or" else all(matches)
+
+
+def pipeline_output_fields() -> set[str]:
+    """Every field name the ES|QL pipelines map to or add."""
+    fields = set()
+    for path in sorted((PIPELINES_DIR / "esql").glob("*.yml")):
+        for item in yaml.safe_load(path.read_text(encoding="utf-8"))["transformations"]:
+            if item["type"] == "field_name_mapping":
+                fields.update(item["mapping"].values())
+            elif item["type"] == "add_condition":
+                fields.update(item["conditions"])
+    return fields
 
 
 def translation_for(case: RuleCase) -> tuple[dict[str, str], dict[str, str]]:
@@ -140,7 +190,10 @@ def load_index(case: RuleCase, kind: str) -> str:
                 "dynamic_templates": [
                     {"strings_as_keyword": {"match_mapping_type": "string", "mapping": {"type": "keyword"}}}
                 ],
-                "properties": {"@timestamp": {"type": "date"}},
+                "properties": {
+                    "@timestamp": {"type": "date"},
+                    **{field: {"type": kind} for field, kind in ECS_FIELD_TYPES.items()},
+                },
             }
         },
     )
@@ -161,7 +214,7 @@ def committed_query(case: RuleCase) -> str:
 
 def retarget(query: str, index: str, time_range: tuple[str, str] | None = None) -> str:
     """Point the query's `from` clause at the test index, optionally limiting @timestamp."""
-    query, count = re.subn(r"^from \S+", f"from {index}", query, count=1)
+    query, count = re.subn(r"^from \S+", f"from {index}", query, count=1, flags=re.MULTILINE)
     if count != 1:
         raise AssertionError(f"query does not start with a from clause: {query[:80]}")
     if time_range:

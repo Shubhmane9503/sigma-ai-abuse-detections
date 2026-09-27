@@ -109,3 +109,45 @@ def test_splunk_correlation_uses_sliding_window():
     )[0]
     assert "bin _time" not in query
     assert "| streamstats time_window=1h dc(awsRegion) as value_count by userIdentity.arn" in query
+
+
+# --- ip-typed fields (ECS type `ip`) -----------------------------------------------------------
+
+
+def test_ip_field_compares_with_to_ip_not_to_lower():
+    query = esql("    selection:\n        source.ip: 192.0.2.10")
+    assert 'source.ip == to_ip("192.0.2.10")' in query
+    assert "to_lower(source.ip)" not in query
+
+
+def test_ip_field_value_list_uses_to_ip():
+    query = esql("    selection:\n        destination.ip:\n            - 192.0.2.10\n            - 2001:DB8::1")
+    assert 'destination.ip in (to_ip("192.0.2.10"), to_ip("2001:DB8::1"))' in query
+
+
+def test_ip_field_cidr_uses_cidr_match():
+    query = esql("    selection:\n        client.ip|cidr: 10.0.0.0/8")
+    assert 'cidr_match(client.ip, "10.0.0.0/8")' in query
+    assert "to_lower(" not in query
+
+
+def test_ip_field_wildcard_is_rejected():
+    from sigma.exceptions import SigmaFeatureNotSupportedByBackendError
+
+    with pytest.raises(SigmaFeatureNotSupportedByBackendError):
+        esql("    selection:\n        source.ip|startswith: '192.0.2.'")
+
+
+def test_no_committed_esql_query_lowercases_an_ip_field():
+    """to_lower() on an ECS ip field is a verification error that rejects the whole query."""
+    import re
+    from pathlib import Path
+
+    from backends import is_ip_field
+
+    offenders = []
+    for path in sorted((Path(__file__).resolve().parent.parent / "queries" / "esql").glob("*.esql")):
+        for field in re.findall(r"to_lower\(\s*`?([\w.@-]+)`?\s*\)", path.read_text(encoding="utf-8")):
+            if is_ip_field(field):
+                offenders.append(f"{path.name}: to_lower({field})")
+    assert not offenders, offenders
